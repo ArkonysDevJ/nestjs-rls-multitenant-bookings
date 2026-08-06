@@ -1,0 +1,64 @@
+// apps/api/src/common/filters/all-exceptions.filter.ts
+// [F-ID: SRC-COMMON-FILTER-EXCEPTIONS-01]
+// @version 1.0.0
+// @changelog 1.0.0 — Maps Postgres error codes (unique/FK/exclusion violations) to HTTP responses.
+
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { FastifyReply } from 'fastify';
+
+interface PostgrestLikeError {
+  code?: string;
+  message?: string;
+  details?: string;
+}
+
+const POSTGRES_CONFLICT_CODES = new Set([
+  '23505', // unique_violation
+  '23503', // foreign_key_violation
+  '23P01', // exclusion_violation (used by the no-overlap booking constraint)
+]);
+
+/**
+ * Translates raw Postgres/PostgREST error codes into proper HTTP
+ * responses instead of leaking database internals to clients.
+ */
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const reply = ctx.getResponse<FastifyReply>();
+
+    if (exception instanceof HttpException) {
+      reply.status(exception.getStatus()).send(exception.getResponse());
+      return;
+    }
+
+    const pgError = exception as PostgrestLikeError;
+    if (pgError?.code && POSTGRES_CONFLICT_CODES.has(pgError.code)) {
+      reply.status(HttpStatus.CONFLICT).send({
+        statusCode: HttpStatus.CONFLICT,
+        message:
+          pgError.code === '23P01'
+            ? 'The requested time range overlaps an existing confirmed booking for this resource.'
+            : 'The request conflicts with existing data.',
+        code: pgError.code,
+      });
+      return;
+    }
+
+    this.logger.error(exception);
+    reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'Internal server error.',
+    });
+  }
+}
