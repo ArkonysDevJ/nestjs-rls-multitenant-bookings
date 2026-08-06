@@ -2,7 +2,8 @@
 
 **Status: work in progress.** Backend and frontend are implemented and
 security tests have been executed end-to-end against a live Supabase
-instance. Seed data and a public deploy are still pending. This README
+instance, including an independent audit round on the RLS policy
+layer. Seed data and a public deploy are still pending. This README
 will be replaced with full setup/usage docs once those are done.
 
 ## What this is
@@ -27,7 +28,7 @@ application-level locking.
 ## Status
 
 - [x] Backend: tenants/members/resources/bookings modules, guards,
-      RLS migration, no-overlap exclusion constraint.
+      RLS migrations, no-overlap exclusion constraint.
 - [x] Frontend: auth, tenant switcher, resource + booking views,
       role-gated actions.
 - [x] Security tests executed against a live Supabase instance
@@ -39,5 +40,16 @@ application-level locking.
       enforcement denied for disallowed actions, and the
       no-overlap exclusion constraint proven race-safe under two
       truly concurrent requests.
+- [x] Independent security audit on the RLS policy layer (self-serve
+      tenant/member creation, owner-created resources, owned-tenant
+      cap) — one finding fixed (an enumeration oracle in a
+      `SECURITY DEFINER` helper, closed by binding it to the
+      caller's own JWT instead of an external parameter), two
+      findings accepted as documented, deliberate tradeoffs rather
+      than bugs: a narrow existence-check oracle needed to bootstrap
+      a brand-new tenant, and a known race condition on the
+      owned-tenant cap under concurrent requests from the same user
+      (does not cross tenant boundaries — see inline comments on
+      migration `0007` for both).
 - [ ] Seed data + public deploy.
 - [ ] Full README with setup instructions.
