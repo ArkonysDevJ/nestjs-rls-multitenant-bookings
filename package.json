@@ -1,0 +1,22 @@
+{
+  "name": "nestjs-rls-multitenant-bookings",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant bookings system demonstrating database-enforced tenant isolation with Postgres RLS. npm workspaces monorepo: apps/api (NestJS) + apps/web (React/Vite).",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
+  "overrides": {
+    "find-my-way": "^9.7.0",
+    "brace-expansion": "^5.0.8"
+  },
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web",
+    "build": "npm run build:api && npm run build:web",
+    "start:api": "npm run start:prod --workspace=apps/api"
+  }
+}
