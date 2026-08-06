@@ -1,0 +1,41 @@
+meta {
+  name: 02 - Viewer role cannot create a booking
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{viewerAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "{{resourceAId}}",
+    "startsAt": "2026-08-01T10:00:00.000Z",
+    "endsAt": "2026-08-01T11:00:00.000Z"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("rejects viewer attempting to create a booking", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
+
+docs {
+  RolesGuard must reject before BookingsService.create runs. A viewer is
+  a valid tenant A member — this proves role enforcement is independent
+  from tenant membership enforcement (test 01).
+}

@@ -1,0 +1,38 @@
+meta {
+  name: 03 - Sign in as tenant A viewer
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{supabaseUrl}}/auth/v1/token?grant_type=password
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{viewerAEmail}}",
+    "password": "{{viewerAPassword}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("viewerAToken", res.body.access_token);
+}
+
+tests {
+  test("received an access token", function () {
+    expect(res.body.access_token).to.be.a("string");
+  });
+}
+
+docs {
+  Same pattern as 01-sign-in-owner, for the tenant A viewer account.
+  Used by security-tests/02-viewer-cannot-create-booking.
+}

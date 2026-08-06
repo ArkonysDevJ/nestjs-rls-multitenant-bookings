@@ -1,0 +1,31 @@
+meta {
+  name: 00 - Unauthenticated request denied
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{baseUrl}}/resources
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("rejects a request with no Authorization header at all", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
+
+docs {
+  No Authorization header, no x-tenant-id header — deliberately not even
+  a valid-looking request. TenantGuard.resolveUserId() must reject this
+  before resolveRequestedTenantId() ever runs, i.e. before tenant/role
+  logic is reachable at all. This is the barrier every other test (01,
+  02) assumes already holds; numbered 00 so it runs first and mirrors
+  the actual guard execution order (auth, then tenant membership, then
+  role).
+}

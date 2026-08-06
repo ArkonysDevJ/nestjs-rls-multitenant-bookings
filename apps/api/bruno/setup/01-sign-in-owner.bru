@@ -1,0 +1,41 @@
+meta {
+  name: 01 - Sign in as tenant A owner
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{supabaseUrl}}/auth/v1/token?grant_type=password
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{ownerAEmail}}",
+    "password": "{{ownerAPassword}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("ownerAToken", res.body.access_token);
+}
+
+tests {
+  test("received an access token", function () {
+    expect(res.body.access_token).to.be.a("string");
+  });
+}
+
+docs {
+  Signs in directly against Supabase Auth's password grant (not the
+  backend — the backend has no login endpoint of its own, it only
+  verifies JWTs) and stores the resulting access_token in ownerAToken.
+  Run once before the security-tests requests that need it. Re-run if
+  the token expires (Supabase access tokens are short-lived).
+}

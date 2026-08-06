@@ -1,0 +1,33 @@
+meta {
+  name: 01 - Tenant A user cannot read Tenant B resources
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/resources
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantBId}}
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("denies a tenant A member acting as tenant B", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
+
+docs {
+  Tenant A's owner is not a member of Tenant B. TenantGuard must reject
+  the request before any resources/bookings query runs — this proves
+  isolation happens at the membership check, not by accident of an
+  empty result set.
+}

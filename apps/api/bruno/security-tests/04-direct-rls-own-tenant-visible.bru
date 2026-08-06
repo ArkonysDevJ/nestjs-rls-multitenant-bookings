@@ -1,0 +1,40 @@
+meta {
+  name: 04 - Direct RLS: owner A reading tenant A's own resources via PostgREST
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{supabaseUrl}}/rest/v1/resources?tenant_id=eq.{{tenantAId}}&select=*
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{ownerAToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("PostgREST returns 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("owner A's own tenant resources ARE visible", function () {
+    expect(res.getBody()).to.be.an("array").that.is.not.empty;
+  });
+}
+
+docs {
+  Sanity companion to 03-direct-rls-cross-tenant-empty: same request
+  shape, same JWT, same anon-key path — only the tenant_id filter
+  changes, to the caller's OWN tenant. This has to return real rows for
+  test 03's empty result to mean anything. Without this, an empty
+  result in 03 would be equally consistent with "RLS is isolating
+  correctly" and "this whole direct-PostgREST path is broken/denying
+  everyone" — running both together is what actually proves isolation
+  rather than blanket denial.
+}

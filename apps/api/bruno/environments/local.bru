@@ -1,0 +1,36 @@
+vars {
+  baseUrl: http://localhost:3000/v1
+  supabaseUrl: https://hhlzjmpxbccrodqthyzh.supabase.co
+  supabaseAnonKey: sb_publishable_Xp6wRAODdsE1rurDZ8V5Pw_2S_kNIJI
+  tenantAId:
+  tenantBId:
+  resourceAId:
+  ownerAEmail:
+  ownerAPassword:
+  staffAEmail:
+  staffAPassword:
+  viewerAEmail:
+  viewerAPassword:
+  ownerAToken:
+  staffAToken:
+  viewerAToken:
+}
+
+# How to fill these:
+# 1. tenantAId / tenantBId / resourceAId: run against the live DB —
+#      select id, name from tenants;
+#      select id, name from resources;
+#    tenantAId = the tenant with owner/staff/viewer members (e.g. "Demo
+#    Tenant"), tenantBId = any other tenant the same users are NOT
+#    members of (e.g. "Second Studio"). resourceAId = a resource that
+#    belongs to tenantAId.
+# 2. ownerAEmail/ownerAPassword, staffAEmail/staffAPassword,
+#    viewerAEmail/viewerAPassword: the real demo accounts created via
+#    the web sign-up flow (owner/staff/viewer members of tenantAId).
+#    Fill these in Bruno's environment editor directly — never commit
+#    real passwords into this file.
+# 3. Run the three requests in bruno/setup/ (sign-in-owner, sign-in-staff,
+#    sign-in-viewer) once — each one signs in against Supabase Auth
+#    directly and writes the resulting access_token into ownerAToken /
+#    staffAToken / viewerAToken automatically via a post-response script.
+#    No manual copy-pasting of JWTs required.

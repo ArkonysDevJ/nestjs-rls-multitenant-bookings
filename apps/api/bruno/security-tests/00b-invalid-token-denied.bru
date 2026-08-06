@@ -1,0 +1,36 @@
+meta {
+  name: 00b - Garbage bearer token denied
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{baseUrl}}/resources
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer this-is-not-a-real-jwt
+  x-tenant-id: {{tenantAId}}
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("rejects a well-formed but garbage bearer token", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
+
+docs {
+  Different failure mode than 00: this request HAS an Authorization
+  header in the right shape ("Bearer <something>"), so it passes
+  resolveUserId()'s presence check and reaches
+  supabase.auth.getUser(token) — which must itself reject a token that
+  isn't a real, currently-valid Supabase JWT. Proves the guard actually
+  verifies the token against Supabase Auth, not just that a header was
+  present.
+}

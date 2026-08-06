@@ -1,0 +1,52 @@
+meta {
+  name: 03 - Direct RLS: owner A reading tenant B resources via PostgREST
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{supabaseUrl}}/rest/v1/resources?tenant_id=eq.{{tenantBId}}&select=*
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{ownerAToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("PostgREST returns 200, not 401/403", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("row-level security silently filters out tenant B's resources", function () {
+    expect(res.getBody()).to.be.an("array").that.is.empty;
+  });
+}
+
+docs {
+  This request bypasses the NestJS backend entirely — it hits Supabase's
+  PostgREST REST API directly with the tenant A owner's real JWT, using
+  the anon key (never the service role key). This is the only way to
+  prove `tenant_isolation_resources` (0001_init.sql) does the isolating,
+  independent of TenantGuard/RolesGuard.
+
+  The earlier Bruno tests (00-02) only prove the NestJS guards work —
+  they use the backend's service role connection, which bypasses RLS
+  entirely. A 401/403 from those tests says nothing about whether
+  Postgres itself would enforce the same boundary if some other client
+  (this request, or any future one) ever queried the database directly
+  with a real user JWT instead of going through the backend.
+
+  Expected result: HTTP 200 with an EMPTY array — not a 401 or 403.
+  RLS does not reject the request; it silently removes rows the caller
+  isn't allowed to see. A non-empty result here would mean the
+  `tenant_isolation_resources` policy is not doing its job, regardless
+  of what the application layer enforces on top of it. Companion test:
+  04-direct-rls-own-tenant-visible (same request, tenant A's own id) —
+  needed to prove this endpoint isn't just broken/denying everything.
+}
