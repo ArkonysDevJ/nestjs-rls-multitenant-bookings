@@ -5,11 +5,10 @@
 > and independently verified against a live database, not just claimed
 > in this README.
 
-**Status: work in progress.** Backend and frontend are implemented and
-security tests have been executed end-to-end against a live Supabase
-instance, including an independent audit round on the RLS policy
-layer. Seed data and a public deploy are still pending. The "Live
-demo" section below will be added once that's done.
+**Status: deployed.** Backend and frontend are implemented, security
+tests have been executed end-to-end against a live Supabase instance
+(including an independent audit round on the RLS policy layer), and
+the app is live with seed data — see "Live demo" below.
 
 ## What this is
 
@@ -179,6 +178,21 @@ RLS surface at the SQL level.
   are never translated: they're persisted/compared domain data, not
   UI copy.
 
+## Live demo
+
+**Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
+**Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
+
+Two seeded tenants (Aurora Studio, Willow Creek Clinic) with demo
+accounts across all three roles, so cross-tenant isolation and
+role-based access are visible without creating data first:
+
+| Email | Password | Role |
+|---|---|---|
+| `demo-owner@arkonysdevj.com` | `arkonys2026` | owner |
+| `demo-staff@arkonysdevj.com` | `arkonys2026` | staff |
+| `demo-viewer@arkonysdevj.com` | `arkonys2026` | viewer |
+
 ## Status
 
 - [x] Backend: tenants/members/resources/bookings modules, guards,
@@ -205,8 +219,12 @@ RLS surface at the SQL level.
       owned-tenant cap under concurrent requests from the same user
       (does not cross tenant boundaries — see inline comments on
       migration `0007` for both).
-- [ ] Seed data + public deploy.
-- [ ] Full README with setup instructions.
+- [x] Seed data + public deploy — backend on Railway, frontend on
+      Vercel, two seeded tenants, three demo accounts (owner/staff/
+      viewer). See "Live demo" above.
+- [x] Full README with setup instructions.
+
+✅ Deployed — August 2026. Backend on Railway, frontend on Vercel.
 
 ## License
 
