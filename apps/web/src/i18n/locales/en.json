@@ -1,0 +1,63 @@
+{
+  "app": {
+    "title": "Bookings",
+    "loading": "Loading…"
+  },
+  "auth": {
+    "subtitle": "Multi-tenant demo — sign in with a demo account.",
+    "emailPlaceholder": "Email",
+    "passwordPlaceholder": "Password",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "switchToSignUp": "Don't have an account? Sign up",
+    "switchToSignIn": "Already have an account? Sign in"
+  },
+  "dashboard": {
+    "signOut": "Sign out",
+    "noMemberships": "This account has no tenant memberships yet.",
+    "activeTenant": "Active tenant",
+    "createTenant": {
+      "title": "Create tenant",
+      "subtitle": "Create your own tenant and become its owner automatically.",
+      "namePlaceholder": "Tenant name",
+      "submit": "Create"
+    }
+  },
+  "workspace": {
+    "resources": "Resources",
+    "noResources": "No active resources.",
+    "capacity": "capacity {{count}}",
+    "bookings": "Bookings",
+    "noBookings": "No bookings yet.",
+    "table": {
+      "resource": "Resource",
+      "starts": "Starts",
+      "ends": "Ends",
+      "status": "Status"
+    },
+    "cancel": "Cancel",
+    "createResource": {
+      "title": "Create resource",
+      "namePlaceholder": "Resource name",
+      "capacityPlaceholder": "Capacity (optional)",
+      "submit": "Create"
+    },
+    "addMember": {
+      "title": "Add member",
+      "emailPlaceholder": "Email",
+      "role": "Role",
+      "roleStaff": "Staff",
+      "roleViewer": "Viewer",
+      "submit": "Add",
+      "success": "Member added."
+    }
+  },
+  "bookingForm": {
+    "title": "New booking",
+    "submit": "Book"
+  },
+  "language": {
+    "es": "ES",
+    "en": "EN"
+  }
+}

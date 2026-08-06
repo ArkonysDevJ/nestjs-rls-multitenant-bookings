@@ -1,0 +1,87 @@
+/* src/index.css
+   [F-ID: FE-INDEX-CSS-01]
+   @version 1.0.0
+   @changelog 1.0.0 — Global tokens + base layout. Colors live as CSS
+     variables so light/dark only touches this block, never component
+     rules below it. */
+
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color-scheme: light dark;
+
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-hover: #f0f1f3;
+
+  --text-1: #1a1c20;
+  --text-2: #4b5563;
+  --text-3: #8b909a;
+
+  --border: #e2e4e9;
+  --border-input: #d0d3d9;
+
+  --accent: #1a56db;
+  --color-error: #b91c1c;
+  --color-success: #16a34a;
+  --color-warning: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1c1f24;
+    --surface-hover: #23262c;
+
+    --text-1: #eceef1;
+    --text-2: #a3a9b4;
+    --text-3: #6b7280;
+
+    --border: #2b2f36;
+    --border-input: #3a3f47;
+
+    --accent: #5b8def;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-1);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font: inherit;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge-owner { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.badge-staff { background: color-mix(in srgb, var(--color-success) 15%, transparent); color: var(--color-success); }
+.badge-viewer { background: color-mix(in srgb, var(--text-3) 20%, transparent); color: var(--text-2); }
+
+.status-confirmed { color: var(--color-success); }
+.status-cancelled { color: var(--text-3); text-decoration: line-through; }

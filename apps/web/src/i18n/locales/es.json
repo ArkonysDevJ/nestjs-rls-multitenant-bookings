@@ -1,0 +1,63 @@
+{
+  "app": {
+    "title": "Reservas",
+    "loading": "Cargando…"
+  },
+  "auth": {
+    "subtitle": "Demo multi-tenant — inicia sesión con una cuenta de prueba.",
+    "emailPlaceholder": "Correo electrónico",
+    "passwordPlaceholder": "Contraseña",
+    "signIn": "Iniciar sesión",
+    "createAccount": "Crear cuenta",
+    "switchToSignUp": "¿No tienes cuenta? Regístrate",
+    "switchToSignIn": "¿Ya tienes cuenta? Inicia sesión"
+  },
+  "dashboard": {
+    "signOut": "Cerrar sesión",
+    "noMemberships": "Esta cuenta aún no pertenece a ningún tenant.",
+    "activeTenant": "Tenant activo",
+    "createTenant": {
+      "title": "Crear tenant",
+      "subtitle": "Crea tu propio tenant y serás su owner automáticamente.",
+      "namePlaceholder": "Nombre del tenant",
+      "submit": "Crear"
+    }
+  },
+  "workspace": {
+    "resources": "Recursos",
+    "noResources": "No hay recursos activos.",
+    "capacity": "capacidad {{count}}",
+    "bookings": "Reservas",
+    "noBookings": "Aún no hay reservas.",
+    "table": {
+      "resource": "Recurso",
+      "starts": "Inicio",
+      "ends": "Fin",
+      "status": "Estado"
+    },
+    "cancel": "Cancelar",
+    "createResource": {
+      "title": "Crear recurso",
+      "namePlaceholder": "Nombre del recurso",
+      "capacityPlaceholder": "Capacidad (opcional)",
+      "submit": "Crear"
+    },
+    "addMember": {
+      "title": "Agregar miembro",
+      "emailPlaceholder": "Correo electrónico",
+      "role": "Rol",
+      "roleStaff": "Staff",
+      "roleViewer": "Viewer",
+      "submit": "Agregar",
+      "success": "Miembro agregado."
+    }
+  },
+  "bookingForm": {
+    "title": "Nueva reserva",
+    "submit": "Reservar"
+  },
+  "language": {
+    "es": "ES",
+    "en": "EN"
+  }
+}
