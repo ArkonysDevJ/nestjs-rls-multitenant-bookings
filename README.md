@@ -1,9 +1,13 @@
 # nestjs-rls-multitenant-bookings
 
-> A multi-tenant bookings system where tenant isolation is enforced by
+🌐 [English](README.md) | [Español](README.es.md)
+
+> **TL;DR:** A multi-tenant bookings system where tenant isolation is enforced by
 > Postgres itself — Row Level Security, not application code alone —
 > and independently verified against a live database, not just claimed
 > in this README.
+
+![Bookings view — allows selecting an active tenant, creating resources with capacities, and managing new bookings](docs/assets/bookings.png)
 
 **Status: deployed.** Backend and frontend are implemented, security
 tests have been executed end-to-end against a live Supabase instance
