@@ -38,20 +38,21 @@ application-level locking.
 ```
 apps/
 ├── api/                                     # NestJS backend
-│   └── src/
-│       ├── tenants/                         # GET /tenants/me, POST /tenants (self-service)
-│       ├── members/                         # POST /members (owner invites staff/viewer by email)
-│       ├── resources/                       # GET/POST /resources (owner-gated create)
-│       ├── bookings/                        # POST/GET /bookings, PATCH /:id/cancel
-│       ├── common/
-│       │   ├── guards/                      # AuthGuard, TenantGuard, RolesGuard
-│       │   ├── decorators/roles.decorator.ts
-│       │   ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
-│       │   └── supabase/supabase.client.ts  # Shared service-role client
-│       ├── supabase/
-│       │   ├── migrations/                  # 0001-0007, applied in order (see below)
-│       │   └── tests/                       # pgTAP suite over the RLS surface
-│       └── bruno/                           # Security test collection (see Testing)
+│   ├── src/
+│   │   ├── tenants/                         # GET /tenants/me, POST /tenants (self-service)
+│   │   ├── members/                         # POST /members (owner invites staff/viewer by email)
+│   │   ├── resources/                       # GET/POST /resources (owner-gated create)
+│   │   ├── bookings/                        # POST/GET /bookings, PATCH /:id/cancel
+│   │   ├── health/                          # GET /v1/health (Supabase keep-alive target, no guards)
+│   │   └── common/
+│   │       ├── guards/                      # AuthGuard, TenantGuard, RolesGuard
+│   │       ├── decorators/roles.decorator.ts
+│   │       ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
+│   │       └── supabase/supabase.client.ts  # Shared service-role client
+│   ├── supabase/
+│   │   ├── migrations/                      # 0001-0008, applied in order (see below)
+│   │   └── tests/                           # pgTAP suite over the RLS surface
+│   └── bruno/                               # Security test collection (see Testing)
 └── web/                                      # React + Vite dashboard
     └── src/
         ├── App.tsx                          # Auth, tenant switcher, resource/booking views
@@ -90,13 +91,15 @@ Apply the migrations in order against your linked Supabase project —
 `0001` creates the schema and RLS policies, `0002` seeds two demo
 tenants (no `auth.users` rows, those come from real sign-ups), `0003`
 through `0007` add self-service tenant/member/resource creation and
-the owned-tenant cap:
+the owned-tenant cap, and `0008` adds `public.ping()`, the no-op
+function backing `GET /v1/health` (see the API table below and
+`.github/workflows/keep-alive.yml`):
 
 ```bash
 psql "<your-supabase-connection-string>" \
   --single-transaction --variable ON_ERROR_STOP=1 \
   -f apps/api/supabase/migrations/0001_init.sql
-# repeat for 0002 through 0007, in order
+# repeat for 0002 through 0008, in order
 ```
 
 ```bash
@@ -121,6 +124,7 @@ checked against the caller's actual memberships on every request.
 | GET    | `/bookings`                | any tenant member         | Bookings for the active tenant, optional `?resource_id=` |
 | POST   | `/bookings`                | owner, staff              | Create a booking; 409 on overlap (Postgres exclusion constraint) |
 | PATCH  | `/bookings/:id/cancel`     | owner                     | Cancel a confirmed booking |
+| GET    | `/health`                  | none (unauthenticated)    | Liveness check for Supabase keep-alive automation; touches no business table |
 
 ## Testing
 

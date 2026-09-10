@@ -23,20 +23,21 @@ Un sistema de reservas multi-tenant donde el aislamiento entre tenants está gar
 ```
 apps/
 ├── api/                                     # Backend NestJS
-│   └── src/
-│       ├── tenants/                         # GET /tenants/me, POST /tenants (autoservicio)
-│       ├── members/                         # POST /members (el owner invita staff/viewer por email)
-│       ├── resources/                       # GET/POST /resources (creación restringida al owner)
-│       ├── bookings/                        # POST/GET /bookings, PATCH /:id/cancel
-│       ├── common/
-│       │   ├── guards/                      # AuthGuard, TenantGuard, RolesGuard
-│       │   ├── decorators/roles.decorator.ts
-│       │   ├── filters/all-exceptions.filter.ts   # Traduce códigos de error de Postgres a HTTP
-│       │   └── supabase/supabase.client.ts  # Cliente service-role compartido
-│       ├── supabase/
-│       │   ├── migrations/                  # 0001-0007, aplicadas en orden (ver abajo)
-│       │   └── tests/                       # Suite pgTAP sobre la superficie de RLS
-│       └── bruno/                           # Colección de tests de seguridad (ver Testing)
+│   ├── src/
+│   │   ├── tenants/                         # GET /tenants/me, POST /tenants (autoservicio)
+│   │   ├── members/                         # POST /members (el owner invita staff/viewer por email)
+│   │   ├── resources/                       # GET/POST /resources (creación restringida al owner)
+│   │   ├── bookings/                        # POST/GET /bookings, PATCH /:id/cancel
+│   │   ├── health/                          # GET /v1/health (objetivo del keep-alive de Supabase, sin guards)
+│   │   └── common/
+│   │       ├── guards/                      # AuthGuard, TenantGuard, RolesGuard
+│   │       ├── decorators/roles.decorator.ts
+│   │       ├── filters/all-exceptions.filter.ts   # Traduce códigos de error de Postgres a HTTP
+│   │       └── supabase/supabase.client.ts  # Cliente service-role compartido
+│   ├── supabase/
+│   │   ├── migrations/                      # 0001-0008, aplicadas en orden (ver abajo)
+│   │   └── tests/                           # Suite pgTAP sobre la superficie de RLS
+│   └── bruno/                               # Colección de tests de seguridad (ver Testing)
 └── web/                                      # Dashboard React + Vite
     └── src/
         ├── App.tsx                          # Auth, selector de tenant, vistas de recursos/reservas
@@ -64,13 +65,13 @@ VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
 VITE_API_URL=http://localhost:3000/v1
 ```
 
-Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios:
+Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, y `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`):
 
 ```bash
 psql "<tu-connection-string-de-supabase>" \
   --single-transaction --variable ON_ERROR_STOP=1 \
   -f apps/api/supabase/migrations/0001_init.sql
-# repetir para 0002 a 0007, en orden
+# repetir para 0002 a 0008, en orden
 ```
 
 ```bash
@@ -92,6 +93,7 @@ Todos los endpoints requieren `Authorization: Bearer <supabase-jwt>` y viven baj
 | GET    | `/bookings`                | cualquier member del tenant | Reservas del tenant activo, opcional `?resource_id=` |
 | POST   | `/bookings`                | owner, staff              | Crea una reserva; 409 si hay overlap (exclusion constraint de Postgres) |
 | PATCH  | `/bookings/:id/cancel`     | owner                     | Cancela una reserva confirmada |
+| GET    | `/health`                  | ninguno (sin autenticación) | Chequeo de vida para la automatización de keep-alive de Supabase; no toca ninguna tabla de negocio |
 
 ## Testing
 
