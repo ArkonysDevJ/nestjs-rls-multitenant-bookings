@@ -1,0 +1,79 @@
+# .github/workflows/keep-alive.yml
+# Pings GET /v1/health on the deployed backend every 3 days so the
+# free-tier Supabase project keeps generating real database activity
+# and never accumulates the ~7 days of inactivity that triggers an
+# auto-pause. /v1/health performs an actual read against Postgres
+# (see apps/api/src/health/) — this is not a no-op HTTP ping.
+#
+# `0 9 */3 * *` fires on every 3rd day-of-month at 09:00 UTC (04:00
+# America/Lima), not on a strict "every 72 hours" clock — at a month
+# boundary the gap can shrink to 1-2 days instead of 3. That's fine
+# here: even the worst case stays far inside the 7-day pause window.
+# GitHub also doesn't guarantee scheduled workflows fire exactly on
+# time (they can slip by hours under high platform load) — again,
+# irrelevant at this frequency given the 7-day margin.
+#
+# workflow_dispatch lets this be triggered manually from the Actions
+# tab, for testing without waiting on the schedule.
+#
+# Self-preservation step: GitHub auto-disables *scheduled* workflows
+# after 60 days with no real git activity (a commit/push) on the
+# default branch — a successful run of this very workflow does NOT
+# count as activity, only an actual commit does. For a "finished"
+# portfolio repo that can easily go quiet for two months, that would
+# silently kill this automation from the outside, defeating the whole
+# point. The "Refresh heartbeat" step below checks how long it's been
+# since the last real commit and, once that crosses 45 days (15-day
+# safety margin before GitHub's 60-day cutoff), pushes a one-line
+# timestamp file — just enough git activity to reset GitHub's clock.
+# It stays silent otherwise, so this doesn't spam the commit history
+# on a repo that's already being actively worked on.
+#
+# Same pattern as nestjs-ai-provider-finance's keep-alive.yml -- kept
+# identical on purpose so both portfolio repos are operationally
+# consistent, not two one-off scripts that happen to do similar
+# things.
+ 
+name: Keep Supabase Alive
+ 
+on:
+  schedule:
+    - cron: '0 9 */3 * *'
+  workflow_dispatch: {}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: curl --fail --show-error --silent "https://nestjs-rls-multitenant-bookings-production.up.railway.app/v1/health"
+ 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+ 
+      - name: Refresh heartbeat if repo has gone quiet
+        run: |
+          set -e
+          DAYS_SINCE_LAST_COMMIT=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Days since last real commit: $DAYS_SINCE_LAST_COMMIT"
+ 
+          if [ "$DAYS_SINCE_LAST_COMMIT" -ge 45 ]; then
+            echo "Repo has been quiet for 45+ days -- GitHub disables scheduled"
+            echo "workflows after 60 days of no commit activity. Pushing a"
+            echo "heartbeat commit to reset that clock."
+            mkdir -p .github
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keep-alive-heartbeat.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/keep-alive-heartbeat.txt
+            git commit -m "chore: keep-alive heartbeat (prevents GitHub's 60-day scheduled-workflow auto-disable)"
+            git push
+          else
+            echo "Repo active recently enough -- no heartbeat commit needed."
+          fi
+ 
