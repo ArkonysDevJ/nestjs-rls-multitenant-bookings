@@ -1,6 +1,13 @@
 // apps/api/src/app.module.ts
 // [F-ID: SRC-APP-MODULE-01]
-// @version 1.1.0
+// @version 1.2.0
+// @changelog 1.2.0 — Register HealthModule (GET /v1/health). Backs
+//   the Supabase keep-alive automation
+//   (.github/workflows/keep-alive.yml): an unattended scheduler pings
+//   it every few days so the free-tier project never accumulates the
+//   ~7 days of inactivity that triggers an auto-pause. Deliberately
+//   outside AuthGuard/TenantGuard/RolesGuard -- see
+//   HealthController/HealthService for why.
 // @changelog 1.1.0 — Added ConfigModule.forRoot({ isGlobal: true }).
 //   Missing since 1.0.0: nothing in this project ever loaded .env into
 //   process.env — `nest start` does not do this on its own. The server
@@ -15,6 +22,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { MembersModule } from './members/members.module';
 import { ResourcesModule } from './resources/resources.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -23,6 +31,7 @@ import { BookingsModule } from './bookings/bookings.module';
     MembersModule,
     ResourcesModule,
     BookingsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
