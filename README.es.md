@@ -49,7 +49,7 @@ Dos barreras independientes protegen el aislamiento entre tenants, deliberadamen
 
 ## Cómo empezar
 
-Requiere Node 22+ (ver `.node-version`). Monorepo con npm workspaces — un solo `npm install` en la raíz instala ambas apps.
+Requiere Node 24.22.1+ (ver `.nvmrc`). Monorepo con npm workspaces — un solo `npm install` en la raíz instala ambas apps.
 
 ```bash
 npm install
@@ -127,6 +127,24 @@ Dos tenants sembrados (Aurora Studio, Willow Creek Clinic) con cuentas demo en l
 | `demo-owner@arkonysdevj.com` | `arkonys2026` | owner |
 | `demo-staff@arkonysdevj.com` | `arkonys2026` | staff |
 | `demo-viewer@arkonysdevj.com` | `arkonys2026` | viewer |
+
+## Decisiones de despliegue
+
+**Node 24 queda fijado** (`engines: >=24.22.1`, `.nvmrc`, `.node-version`) porque 24.22.1 es la primera versión 24.x con las [correcciones de seguridad de octubre de 2026](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). Sin una versión declarada, el builder que despliega el backend elige una por su cuenta.
+
+**Por qué Docker.** `apps/api/Dockerfile` convierte la API en una imagen cuyo runtime lo fija la etiqueta base (`node:24.22.1-slim`), en vez de resolverlo un builder al momento de desplegar. La misma imagen corre en local y en cualquier host de contenedores, y solo lleva `dist/` y las dependencias de producción. Se construye desde la raíz del repositorio: `docker build -f apps/api/Dockerfile .`
+
+| | Railway | Cloud Run |
+|---|---|---|
+| Costo con poco tráfico | El contenedor se cobra mientras corre, es decir, todo el tiempo salvo que se active el modo de suspensión | Escala a cero; el tiempo inactivo no se cobra |
+| Arranque en frío | Ninguno por defecto: la instancia sigue activa | La primera petición tras un periodo inactivo espera a que arranque una instancia, salvo que se mantenga un mínimo de instancias |
+| Autenticación | URL pública; el control de acceso queda en la app (aquí, los guards con JWT de Supabase) | Pública, o restringida por la propia plataforma a llamadas autenticadas con IAM |
+| Cómo se fija la versión de Node | Nixpacks la deduce de `engines` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
+| Quién compila la imagen | Railway, desde el repositorio, en cada despliegue | Uno mismo o el CI (o Cloud Build), subiéndola a un registro |
+
+Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya está desplegado; el Dockerfile lleva la decisión de la versión de Node al repositorio en vez de dejársela al builder.
+
+**Contrato de la imagen:** escucha en `PORT` (3000 si no está definido) en `0.0.0.0`, no guarda estado local (todos los datos están en Supabase), escribe los logs en stdout/stderr y se cierra de forma ordenada con `SIGTERM`; cualquier host que cumpla eso puede ejecutarla.
 
 ## Estado
 
