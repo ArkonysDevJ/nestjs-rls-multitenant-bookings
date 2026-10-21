@@ -4,6 +4,9 @@
   "private": true,
   "description": "Backend: NestJS + Postgres RLS multi-tenant bookings API.",
   "license": "MIT",
+  "engines": {
+    "node": ">=24.22.1"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",

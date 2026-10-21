@@ -4,6 +4,9 @@
   "private": true,
   "description": "Multi-tenant bookings system demonstrating database-enforced tenant isolation with Postgres RLS. npm workspaces monorepo: apps/api (NestJS) + apps/web (React/Vite).",
   "license": "MIT",
+  "engines": {
+    "node": ">=24.22.1"
+  },
   "workspaces": [
     "apps/*"
   ],
