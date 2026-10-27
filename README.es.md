@@ -45,7 +45,12 @@ apps/
         └── i18n/                            # react-i18next, es por defecto / en como toggle
 ```
 
-Dos barreras independientes protegen el aislamiento entre tenants, deliberadamente: `TenantGuard`/`RolesGuard` en la capa de NestJS (de lo que realmente depende la conexión service-role del backend), y las políticas RLS en Postgres (lo que protege los datos si alguna vez algo se conecta con el JWT de un usuario en vez de pasar por el backend). Ninguna se asume redundante frente a la otra — ver "Testing" para cómo se verifica cada una por separado.
+Dos barreras independientes protegen el aislamiento entre tenants, y cuál aplica depende de la ruta que siga la petición:
+
+- **A través de la API.** El backend habla con Postgres con la clave service-role, que salta RLS. En esta ruta el aislamiento depende de `TenantGuard`/`RolesGuard` más un filtro explícito por `tenant_id` en cada consulta de los servicios; RLS no aplica, así que un filtro omitido sería una fuga directa entre tenants.
+- **Directo con el JWT de un usuario.** Un cliente que consulta por sí mismo la API PostgREST de Supabase queda sujeto a las políticas RLS de Postgres, que son la única barrera en esa ruta.
+
+Ninguna barrera se asume redundante frente a la otra — ver "Testing" para cómo se verifica cada una por separado.
 
 ## Cómo empezar
 
@@ -105,7 +110,34 @@ mocks:
 - **`security-tests/`** — `00`/`00b` prueban que `AuthGuard` rechaza un token faltante o inválido antes de que corra cualquier otra cosa; `01`/`02` prueban que `TenantGuard`/`RolesGuard` rechazan peticiones cross-tenant y de rol incorrecto; `03`/`04` son las que realmente importan para la afirmación central de este proyecto — evitan el backend de NestJS por completo y consultan la API PostgREST de Supabase directamente con el JWT de un usuario real, probando que RLS por sí sola filtra las filas cross-tenant (`200 []`) independientemente de cualquier guard de la capa de aplicación, con una petición de control del mismo tenant (`04`) confirmando que el resultado vacío significa aislamiento, no un endpoint roto.
 - **`tests/03-concurrent-overlap-race.sh`** — un shell script, no una petición de Bruno, porque probar que el exclusion constraint de no-overlap es race-safe requiere dos peticiones genuinamente simultáneas, algo que un cliente REST gráfico no puede garantizar; dos llamadas `curl` en background sí.
 
-Una suite pgTAP separada (`apps/api/supabase/tests/`) ejercita la misma superficie de RLS a nivel SQL.
+Una suite pgTAP separada (`apps/api/supabase/tests/`) ejercita la misma superficie de RLS a nivel SQL. Una suite Jest en `apps/api/src` cubre los guards y el filtro de excepciones sin base de datos.
+
+### Ejecutar las pruebas
+
+Requisitos previos: Node 22+ (ver `.node-version`), `npm install` en la raíz del repo y, para las pruebas de base de datos, Docker más la [CLI de Supabase](https://supabase.com/docs/guides/local-development).
+
+**Pruebas unitarias (Jest)** — no necesitan base de datos ni red:
+
+```bash
+npm test --workspace=apps/api
+```
+
+**Pruebas de base de datos (pgTAP)** — corren contra un stack local de Supabase, nunca contra el proyecto demo. El hook de preparación descarga los helpers de prueba desde database.dev, así que requiere acceso a internet:
+
+```bash
+cd apps/api
+supabase start
+supabase db test
+```
+
+**Colección de seguridad (Bruno)** — las peticiones de `apps/api/bruno/security-tests/` necesitan la API en ejecución (`npm run dev:api`) y un proyecto de Supabase con usuarios en los tres roles. Abre la colección en Bruno, completa las variables del entorno `local` (IDs de tenant y recurso, emails y contraseñas), ejecuta `setup/` una vez para capturar los tokens y luego `security-tests/`.
+
+**Carrera de solapamiento concurrente** — con la API en ejecución y a mano un token de staff, el ID del tenant y el ID del recurso:
+
+```bash
+BASE_URL=http://localhost:3000/v1 STAFF_TOKEN=<jwt> TENANT_ID=<id> \
+  RESOURCE_ID=<id> bash apps/api/bruno/tests/03-concurrent-overlap-race.sh
+```
 
 ## Qué demuestra este proyecto
 

@@ -1,0 +1,46 @@
+meta {
+  name: 05 - Staff cannot book a resource of another tenant
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "{{resourceBId}}",
+    "startsAt": "2026-08-01T10:00:00.000Z",
+    "endsAt": "2026-08-01T11:00:00.000Z"
+  }
+}
+
+assert {
+  res.status: gte 400
+  res.status: lt 500
+}
+
+tests {
+  test("rejects a booking on a resource that belongs to another tenant", function () {
+    expect(res.getStatus()).to.be.within(400, 499);
+  });
+}
+
+docs {
+  The caller is a valid tenant A member acting as tenant A (so TenantGuard
+  and RolesGuard both pass), but resourceId belongs to tenant B. The
+  request must be rejected by a database-level barrier, not just by the
+  guards. Requires resourceBId: a resource that belongs to tenantBId.
+  The exact status code is not pinned; any 4xx satisfies the request.
+  The database-level counterpart is
+  supabase/tests/database/002-booking-resource-ownership.test.sql.
+}

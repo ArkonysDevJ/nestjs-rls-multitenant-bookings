@@ -60,13 +60,20 @@ apps/
         └── i18n/                            # react-i18next, es default / en toggle
 ```
 
-Two independent barriers protect tenant isolation, deliberately:
-`TenantGuard`/`RolesGuard` in the NestJS layer (what the backend's
-service-role connection actually relies on), and RLS policies in
-Postgres (what protects the data if anything ever connects with a
-user's own JWT instead of going through the backend). Neither is
-assumed to make the other redundant — see "Testing" for how each is
-verified separately.
+Two independent barriers protect tenant isolation, and which one applies
+depends on the route the request takes:
+
+- **Through the API.** The backend talks to Postgres with the
+  service-role key, which bypasses RLS. On this route isolation relies
+  on `TenantGuard`/`RolesGuard` plus an explicit `tenant_id` filter in
+  every service query; RLS does not apply, so a missing filter would be
+  a direct cross-tenant leak.
+- **Directly with a user JWT.** A client that queries Supabase's
+  PostgREST API itself is subject to the RLS policies in Postgres, which
+  are the only barrier on that route.
+
+Neither barrier is assumed to make the other redundant — see "Testing"
+for how each is verified separately.
 
 ## Getting started
 
@@ -152,7 +159,45 @@ mocks:
   REST client can't guarantee; two backgrounded `curl` calls can.
 
 A separate pgTAP suite (`apps/api/supabase/tests/`) exercises the same
-RLS surface at the SQL level.
+RLS surface at the SQL level. A Jest suite in `apps/api/src` covers the
+guards and the exception filter without a database.
+
+### Running the tests
+
+Prerequisites: Node 22+ (see `.node-version`), `npm install` at the repo
+root, and for the database tests Docker plus the
+[Supabase CLI](https://supabase.com/docs/guides/local-development).
+
+**Unit tests (Jest)** — no database or network needed:
+
+```bash
+npm test --workspace=apps/api
+```
+
+**Database tests (pgTAP)** — run against a local Supabase stack, never
+against the demo project. The setup hook downloads the test helpers from
+database.dev, so it needs internet access:
+
+```bash
+cd apps/api
+supabase start
+supabase db test
+```
+
+**Security collection (Bruno)** — the requests under
+`apps/api/bruno/security-tests/` need a running API (`npm run dev:api`)
+and a Supabase project with users in the three roles. Open the collection
+in Bruno, fill the variables of the `local` environment (tenant and
+resource IDs, user emails and passwords), run `setup/` once to capture the
+tokens, then run `security-tests/`.
+
+**Concurrent overlap race** — with the API running and a staff token,
+tenant ID and resource ID at hand:
+
+```bash
+BASE_URL=http://localhost:3000/v1 STAFF_TOKEN=<jwt> TENANT_ID=<id> \
+  RESOURCE_ID=<id> bash apps/api/bruno/tests/03-concurrent-overlap-race.sh
+```
 
 ## What this project demonstrates
 
