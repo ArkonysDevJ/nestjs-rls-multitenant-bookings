@@ -20,6 +20,10 @@ Un sistema de reservas multi-tenant donde el aislamiento entre tenants está gar
 
 ## Arquitectura
 
+El diseño completo (rutas de acceso, modelo de datos, políticas, despliegue y limitaciones conocidas)
+está en [ARCHITECTURE.md](ARCHITECTURE.md). El comportamiento de cada funcionalidad de la API está en
+[specs/](specs/), y [AGENTS.md](AGENTS.md) reúne las reglas para agentes de código con IA.
+
 ```
 apps/
 ├── api/                                     # Backend NestJS
@@ -194,7 +198,7 @@ Espera un `201` y un `409`, y elige un horario aleatorio, así que se puede repe
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
 **Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
 
-Dos tenants sembrados (Aurora Studio, Riverside Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
+Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
 
 | Email | Password | Rol |
 |---|---|---|

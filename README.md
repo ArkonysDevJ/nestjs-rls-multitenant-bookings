@@ -35,6 +35,10 @@ application-level locking.
 
 ## Architecture
 
+The full design (request paths, data model, policies, deployment, known limitations)
+is in [ARCHITECTURE.md](ARCHITECTURE.md). The behaviour of each API feature is in
+[specs/](specs/), and [AGENTS.md](AGENTS.md) has the rules for AI coding agents.
+
 ```
 apps/
 ├── api/                                     # NestJS backend
@@ -301,7 +305,7 @@ can be repeated. Stop the stack with `supabase stop` when you are done.
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
 **Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
 
-Two seeded tenants (Aurora Studio, Riverside Clinic) with demo
+Two tenants (Aurora Studio, Willow Creek Clinic) with demo
 accounts across all three roles, so cross-tenant isolation and
 role-based access are visible without creating data first:
 
