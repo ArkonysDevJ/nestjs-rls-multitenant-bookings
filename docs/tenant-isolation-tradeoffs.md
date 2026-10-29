@@ -15,7 +15,7 @@ trade-off is concentrated blast radius: a missing or wrong `tenant_id`
 filter is a cross-tenant leak, not a crash. This repo's backend does
 not lean on RLS as the only defense against that — every repository
 query carries an explicit `tenant_id` filter in application code too
-(see `MH-2`-equivalent discipline in `apps/api/src`), specifically
+(see the query code under `apps/api/src`), specifically
 because the service role key bypasses RLS entirely. RLS here is the
 second, independent barrier for any client that connects with a
 user's own JWT instead of the service role — not the only one.
