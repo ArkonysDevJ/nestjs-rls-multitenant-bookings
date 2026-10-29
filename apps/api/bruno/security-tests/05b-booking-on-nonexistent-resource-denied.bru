@@ -1,0 +1,50 @@
+meta {
+  name: 05b - Booking on a nonexistent resource gets the same answer
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "99999999-9999-4999-8999-999999999999",
+    "startsAt": "2026-08-01T10:00:00.000Z",
+    "endsAt": "2026-08-01T11:00:00.000Z"
+  }
+}
+
+assert {
+  res.status: eq 404
+}
+
+tests {
+  test("answers 404 for a resource that does not exist", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+
+  test("the body is identical to the one for a resource of another tenant (05)", function () {
+    expect(res.body).to.deep.equal({
+      statusCode: 404,
+      message: "The requested resource was not found.",
+      code: "RESOURCE_NOT_FOUND",
+    });
+  });
+}
+
+docs {
+  A resource that does not exist and a resource of another tenant must be
+  indistinguishable to the caller, otherwise the response tells whether a
+  resource of another tenant exists. 05 asserts the same status and body
+  for the foreign resource.
+}

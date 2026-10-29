@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Bruno environment generated for the local Supabase stack (holds test credentials)
+apps/api/bruno/environments/local-stack.bru

@@ -25,22 +25,32 @@ body:json {
 }
 
 assert {
-  res.status: gte 400
-  res.status: lt 500
+  res.status: eq 404
 }
 
 tests {
-  test("rejects a booking on a resource that belongs to another tenant", function () {
-    expect(res.getStatus()).to.be.within(400, 499);
+  test("answers 404 for a resource that belongs to another tenant", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+
+  test("the body is the resource-not-found response, not a guard or route 404", function () {
+    expect(res.body).to.deep.equal({
+      statusCode: 404,
+      message: "The requested resource was not found.",
+      code: "RESOURCE_NOT_FOUND",
+    });
   });
 }
 
 docs {
   The caller is a valid tenant A member acting as tenant A (so TenantGuard
   and RolesGuard both pass), but resourceId belongs to tenant B. The
-  request must be rejected by a database-level barrier, not just by the
-  guards. Requires resourceBId: a resource that belongs to tenantBId.
-  The exact status code is not pinned; any 4xx satisfies the request.
+  request must be rejected by the composite foreign key
+  bookings_resource_same_tenant_fk, which the API answers with a 404 whose
+  body is the same as for a resource that does not exist (see 05b). The
+  code and message in the body tell it apart from a guard rejection
+  (401/403) and from the 404 Nest gives to an unknown route.
+  Requires resourceBId: a resource that belongs to tenantBId.
   The database-level counterpart is
   supabase/tests/database/002-booking-resource-ownership.test.sql.
 }
