@@ -1,0 +1,28 @@
+meta {
+  name: 03 - Cancelling a cancelled booking is rejected
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/bookings/{{cancelTargetId}}/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantAId}}
+}
+
+tests {
+  test("answers 409 and says only a confirmed booking can be cancelled", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.body.message).to.equal("Only a confirmed booking can be cancelled.");
+  });
+}
+
+docs {
+  Cancelled is a terminal state. The rejected attempt must not change the
+  booking, and must not be a 500.
+}
