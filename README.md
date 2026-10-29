@@ -337,6 +337,8 @@ role-based access are visible without creating data first:
       owned-tenant cap under concurrent requests from the same user
       (does not cross tenant boundaries — see inline comments on
       migration `0007` for both).
+
+      **Security Audit:** Independent RLS policy and isolation review conducted via AI-assisted adversarial analysis (using Anthropic's Claude), designed, directed, and verified by André Chacón. The comprehensive audit trail and vulnerability mapping are maintained as internal governance artifacts.
 - [x] Seed data + public deploy — backend on Railway, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.
