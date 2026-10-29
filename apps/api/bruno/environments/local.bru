@@ -1,11 +1,12 @@
 vars {
   baseUrl: http://localhost:3000/v1
-  supabaseUrl: https://hhlzjmpxbccrodqthyzh.supabase.co
-  supabaseAnonKey: sb_publishable_Xp6wRAODdsE1rurDZ8V5Pw_2S_kNIJI
+  supabaseUrl:
+  supabaseAnonKey:
   tenantAId:
   tenantBId:
   resourceAId:
   resourceBId:
+  bookingBId:
   ownerAEmail:
   ownerAPassword:
   staffAEmail:
@@ -17,21 +18,19 @@ vars {
   viewerAToken:
 }
 
-# How to fill these:
-# 1. tenantAId / tenantBId / resourceAId: run against the live DB —
-#      select id, name from tenants;
-#      select id, name from resources;
-#    tenantAId = the tenant with owner/staff/viewer members (e.g. "Demo
-#    Tenant"), tenantBId = any other tenant the same users are NOT
-#    members of (e.g. "Second Studio"). resourceAId = a resource that
-#    belongs to tenantAId.
-# 2. ownerAEmail/ownerAPassword, staffAEmail/staffAPassword,
-#    viewerAEmail/viewerAPassword: the real demo accounts created via
-#    the web sign-up flow (owner/staff/viewer members of tenantAId).
-#    Fill these in Bruno's environment editor directly — never commit
-#    real passwords into this file.
-# 3. Run the three requests in bruno/setup/ (sign-in-owner, sign-in-staff,
-#    sign-in-viewer) once — each one signs in against Supabase Auth
-#    directly and writes the resulting access_token into ownerAToken /
-#    staffAToken / viewerAToken automatically via a post-response script.
-#    No manual copy-pasting of JWTs required.
+# Empty template. Do not put real values in this file.
+#
+# For the local Supabase stack, do not fill this by hand: run
+#   bash bruno/setup-local.sh
+# from apps/api. It creates the users and data on the local stack and writes
+# environments/local-stack.bru, which is ignored by Git and is the
+# environment to select in Bruno.
+#
+# To aim the collection at a Supabase project of your own instead, copy this
+# file, fill the copy in Bruno's environment editor (project URL, anon or
+# publishable key, tenant, resource and booking IDs, and a user per role) and
+# keep the copy out of version control. The tokens are filled automatically
+# by running the requests in bruno/setup/ once.
+#
+# The tests create bookings and cancel them. Never point them at the deployed
+# demo.
