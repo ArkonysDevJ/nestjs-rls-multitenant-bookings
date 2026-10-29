@@ -50,6 +50,76 @@ describe('AllExceptionsFilter', () => {
     },
   );
 
+  describe('booking on a resource of another tenant', () => {
+    // PostgREST reports the violated constraint inside `message`.
+    const FK_MESSAGE =
+      'insert or update on table "bookings" violates foreign key constraint "bookings_resource_same_tenant_fk"';
+
+    it('maps the composite resource/tenant foreign key to a 404', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch(
+        {
+          code: '23503',
+          message: FK_MESSAGE,
+          details: 'Key (resource_id, tenant_id)=(r-1, t-1) is not present in table "resources".',
+        },
+        host,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(404);
+      expect(reply.send).toHaveBeenCalledWith({
+        statusCode: 404,
+        message: 'The requested resource was not found.',
+        code: 'RESOURCE_NOT_FOUND',
+      });
+    });
+
+    it('answers a foreign resource and a nonexistent one identically', () => {
+      const foreign = makeHost();
+      filter.catch(
+        { code: '23503', message: FK_MESSAGE, details: 'Key (resource_id, tenant_id)=(foreign, t-1)' },
+        foreign.host,
+      );
+      const missing = makeHost();
+      filter.catch(
+        { code: '23503', message: FK_MESSAGE, details: 'Key (resource_id, tenant_id)=(missing, t-1)' },
+        missing.host,
+      );
+
+      expect(foreign.reply.status.mock.calls).toEqual(missing.reply.status.mock.calls);
+      expect(foreign.reply.send.mock.calls).toEqual(missing.reply.send.mock.calls);
+    });
+
+    it('does not echo the constraint name or the key details to the client', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch(
+        { code: '23503', message: FK_MESSAGE, details: 'Key (resource_id, tenant_id)=(r-1, t-1)' },
+        host,
+      );
+
+      const body = JSON.stringify(reply.send.mock.calls[0][0]);
+      expect(body).not.toContain('bookings_resource_same_tenant_fk');
+      expect(body).not.toContain('r-1');
+    });
+
+    it('keeps 409 for a foreign key violation on any other constraint', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch(
+        {
+          code: '23503',
+          message:
+            'insert or update on table "members" violates foreign key constraint "members_user_id_fkey"',
+        },
+        host,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(409);
+    });
+  });
+
   it('maps the exclusion violation 23P01 to a 409 about overlapping bookings', () => {
     const { host, reply } = makeHost();
 
