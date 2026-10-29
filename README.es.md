@@ -173,4 +173,4 @@ Dos tenants sembrados (Aurora Studio, Willow Creek Clinic) con cuentas demo en l
 
 ## Licencia
 
-MIT — ver [LICENSE](./LICENSE).
+Apache License 2.0 — ver [LICENSE](./LICENSE) y [NOTICE](./NOTICE).
