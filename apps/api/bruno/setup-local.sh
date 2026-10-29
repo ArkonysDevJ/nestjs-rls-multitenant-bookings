@@ -15,10 +15,18 @@
 # Usage (from apps/api):  bash bruno/setup-local.sh
 
 set -euo pipefail
+trap 'echo "::error::setup-local.sh failed at line $LINENO"' ERR
 
 cd "$(dirname "$0")/.."
 
-STATUS_ENV="$(npx --no-install supabase status -o env)"
+# The Supabase CLI is on the PATH in CI and may be an npm install locally.
+if command -v supabase >/dev/null 2>&1; then
+  SUPABASE=(supabase)
+else
+  SUPABASE=(npx --no-install supabase)
+fi
+
+STATUS_ENV="$("${SUPABASE[@]}" status -o env)"
 get_var() { printf '%s\n' "$STATUS_ENV" | sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" | head -n 1; }
 
 API_URL="$(get_var API_URL)"
