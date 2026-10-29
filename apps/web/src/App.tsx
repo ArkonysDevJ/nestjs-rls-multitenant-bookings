@@ -27,7 +27,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from './lib/supabase';
-import { api, Tenant, Resource, Booking, MemberRole } from './lib/api';
+import { api, ApiError, Tenant, Resource, Booking, MemberRole } from './lib/api';
 import { setLanguage } from './i18n';
 
 export default function App() {
@@ -596,9 +596,14 @@ function CreateBookingForm({
       setEndsAt('');
       onCreated();
     } catch (err) {
-      // A 409 here most often means the no_overlapping_bookings
-      // exclusion constraint rejected the slot — surface it as-is.
-      setError(String(err));
+      // A 404 means the resource is not one of this tenant's; a 409 most
+      // often means the no_overlapping_bookings exclusion constraint
+      // rejected the slot — surface it as-is.
+      setError(
+        err instanceof ApiError && err.status === 404
+          ? t('bookingForm.resourceNotFound')
+          : String(err),
+      );
     } finally {
       setBusy(false);
     }

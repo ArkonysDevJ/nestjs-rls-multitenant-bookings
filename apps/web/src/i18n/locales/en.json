@@ -54,7 +54,8 @@
   },
   "bookingForm": {
     "title": "New booking",
-    "submit": "Book"
+    "submit": "Book",
+    "resourceNotFound": "That resource is not available. Pick another one from the list."
   },
   "language": {
     "es": "ES",

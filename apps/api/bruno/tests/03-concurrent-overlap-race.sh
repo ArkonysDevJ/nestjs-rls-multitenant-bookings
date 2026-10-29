@@ -24,8 +24,10 @@ STAFF_TOKEN="${STAFF_TOKEN:?set STAFF_TOKEN}"
 TENANT_ID="${TENANT_ID:?set TENANT_ID}"
 RESOURCE_ID="${RESOURCE_ID:?set RESOURCE_ID}"
 
-STARTS_AT="2026-08-20T10:00:00.000Z"
-ENDS_AT="2026-08-20T11:00:00.000Z"
+# A random hour in a far-away decade, so a booking left by a previous run does
+# not turn this run into two 409s. Set STARTS_AT and ENDS_AT to pin the slot.
+STARTS_AT="${STARTS_AT:-$(node -e "console.log(new Date(Date.UTC(2035, 0, 1) + Math.floor(Math.random() * 87600) * 3600000).toISOString())")}"
+ENDS_AT="${ENDS_AT:-$(node -e "console.log(new Date(Date.parse('${STARTS_AT}') + 3600000).toISOString())")}"
 
 BODY=$(cat <<JSON
 {"resourceId":"${RESOURCE_ID}","startsAt":"${STARTS_AT}","endsAt":"${ENDS_AT}"}

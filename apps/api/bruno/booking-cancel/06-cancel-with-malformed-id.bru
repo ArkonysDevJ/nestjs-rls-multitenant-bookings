@@ -1,0 +1,22 @@
+meta {
+  name: 06 - Cancelling with a malformed id answers 400
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/bookings/not-a-uuid/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantAId}}
+}
+
+tests {
+  test("answers 400, never 500", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

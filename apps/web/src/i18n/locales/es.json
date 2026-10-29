@@ -54,7 +54,8 @@
   },
   "bookingForm": {
     "title": "Nueva reserva",
-    "submit": "Reservar"
+    "submit": "Reservar",
+    "resourceNotFound": "Ese recurso no está disponible. Elige otro de la lista."
   },
   "language": {
     "es": "ES",

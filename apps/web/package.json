@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "description": "Frontend: React + Vite dashboard for the multi-tenant bookings demo.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "author": "André Chacón (@ArkonysDevJ)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

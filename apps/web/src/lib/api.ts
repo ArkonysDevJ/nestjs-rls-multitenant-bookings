@@ -27,6 +27,17 @@ import { supabase } from './supabase';
 
 const API_URL = import.meta.env.VITE_API_URL as string;
 
+/** An error response from the API, with the HTTP status kept for callers. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function authorizedFetch(
   path: string,
   options: { tenantId?: string; init?: RequestInit } = {},
@@ -55,7 +66,7 @@ async function authorizedFetch(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(extractErrorMessage(response.status, body));
+    throw new ApiError(response.status, extractErrorMessage(response.status, body));
   }
 
   if (response.status === 204) {

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Backend: NestJS + Postgres RLS multi-tenant bookings API.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "author": "André Chacón (@ArkonysDevJ)",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -27,7 +28,10 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
     "@nestjs/testing": "^11.1.28",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.15",
     "typescript": "^5.5.4"
   }
 }
