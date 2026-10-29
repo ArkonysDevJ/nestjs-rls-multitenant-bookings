@@ -17,7 +17,8 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$TESTS_DIR/.."
 
 ENV_FILE="environments/local-stack.bru"
 
@@ -45,4 +46,4 @@ if [ -z "${BASE_URL:-}" ] || [ -z "${STAFF_TOKEN:-}" ] || [ -z "${TENANT_ID:-}" 
 fi
 
 export BASE_URL STAFF_TOKEN TENANT_ID RESOURCE_ID
-exec bash "$(dirname "$0")/03-concurrent-overlap-race.sh"
+exec bash "$TESTS_DIR/03-concurrent-overlap-race.sh"
