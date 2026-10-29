@@ -77,9 +77,15 @@ jobs:
         working-directory: apps/api
         run: bash bruno/setup-local.sh
 
+      # The CLI is installed outside the repository (no install scripts) and
+      # run from the collection folder: through npx inside an npm workspace it
+      # does not run at the collection root.
+      - name: Install Bruno CLI
+        run: npm install --prefix "$RUNNER_TEMP/bru" --ignore-scripts --no-audit --no-fund @usebruno/cli@4.3.0
+
       - name: Integration tests (Bruno)
         working-directory: apps/api/bruno
-        run: npx --yes @usebruno/cli@4.3.0 run setup security-tests booking-cancel --env local-stack
+        run: node "$RUNNER_TEMP/bru/node_modules/@usebruno/cli/bin/bru.js" run setup security-tests booking-cancel --env local-stack
 
       - name: API log
         if: failure()
