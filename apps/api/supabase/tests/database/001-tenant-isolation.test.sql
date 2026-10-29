@@ -78,6 +78,7 @@ select throws_ok(
     )
   $$,
   '42501',
+  null,
   'viewer cannot create a booking (RLS denies the insert)'
 );
 
@@ -110,6 +111,7 @@ select throws_ok(
     )
   $$,
   '42501',
+  null,
   'staff cannot create a booking attributed to a different user (created_by spoof)'
 );
 
@@ -166,6 +168,7 @@ select throws_ok(
     )
   $$,
   '23P01',
+  null,
   'overlapping confirmed booking for the same resource is rejected by the exclusion constraint'
 );
 

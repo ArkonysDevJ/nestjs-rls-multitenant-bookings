@@ -11,9 +11,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * The backend never holds a per-request user session — it authenticates
  * every request via the incoming JWT and talks to Postgres with the
  * service role key. Row Level Security is bypassed by this key, so tenant
- * isolation must be enforced explicitly in every query (see TenantScoped
- * repositories / guards below). There is no defense in depth: a missing
- * `tenant_id` filter is a direct cross-tenant data leak.
+ * isolation must be enforced explicitly in every query (see the guards
+ * in `common/guards` and the `tenant_id` filter in each service). On this
+ * route there is no RLS defense in depth: a missing `tenant_id` filter is
+ * a direct cross-tenant data leak. RLS only protects clients that query
+ * Postgres directly with a user JWT.
  *
  * Realtime/websocket transport is disabled: this service never subscribes
  * to realtime channels, and leaving the transport enabled has been known

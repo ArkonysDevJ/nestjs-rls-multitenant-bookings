@@ -50,27 +50,50 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
 │   │       └── supabase/supabase.client.ts  # Shared service-role client
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0008, applied in order (see below)
+│   │   ├── migrations/                      # 0001-0010, applied in order (see below)
 │   │   └── tests/                           # pgTAP suite over the RLS surface
-│   └── bruno/                               # Security test collection (see Testing)
+│   └── bruno/                               # HTTP test collection and local fixtures script (see Testing)
 └── web/                                      # React + Vite dashboard
     └── src/
         ├── App.tsx                          # Auth, tenant switcher, resource/booking views
         ├── lib/                             # supabase client + backend fetch wrapper
         └── i18n/                            # react-i18next, es default / en toggle
+
+.github/workflows/                       # ci.yml (tests on every push), keep-alive.yml (demo ping)
+docs/                                    # trade-off notes and screenshots
+pake/                                    # app icons (512 and 1024 px) for a desktop build of the web app with Pake
 ```
 
-Two independent barriers protect tenant isolation, deliberately:
-`TenantGuard`/`RolesGuard` in the NestJS layer (what the backend's
-service-role connection actually relies on), and RLS policies in
-Postgres (what protects the data if anything ever connects with a
-user's own JWT instead of going through the backend). Neither is
-assumed to make the other redundant — see "Testing" for how each is
-verified separately.
+Two independent barriers protect tenant isolation, and which one applies
+depends on the route the request takes:
+
+- **Through the API.** The backend talks to Postgres with the
+  service-role key, which bypasses RLS. On this route isolation relies
+  on `TenantGuard`/`RolesGuard` plus an explicit `tenant_id` filter in
+  every service query; RLS does not apply, so a missing filter would be
+  a direct cross-tenant leak.
+- **Directly with a user JWT.** A client that queries Supabase's
+  PostgREST API itself is subject to the RLS policies in Postgres and to
+  the column privileges of the `authenticated` role. Those are the
+  barriers on that route.
+
+Some rules are enforced by Postgres for every writer, the service role
+included, so they hold on both routes. This is what protects each rule:
+
+| Rule | Through the API | Directly with a user JWT |
+|---|---|---|
+| Rows of other tenants are not readable | `TenantGuard` + `tenant_id` filter in every query | RLS select policies |
+| Roles per action | `RolesGuard` | RLS insert/update policies |
+| A booking uses a resource of its own tenant | Composite foreign key `bookings_resource_same_tenant_fk`. The API answers 404, the same for a resource of another tenant and for one that does not exist | The same foreign key (`23503`, also the same for a busy and a free time slot) |
+| No two confirmed bookings overlap on a resource | Exclusion constraint `no_overlapping_bookings` (led by `tenant_id`); 409 | The same constraint |
+| An owner can only cancel a booking | Only `PATCH /bookings/:id/cancel` exists; it cancels a confirmed booking and nothing else | `UPDATE` is granted on `bookings.status` only, and the owner policy allows confirmed → cancelled; cancelled is terminal |
+
+Neither barrier is assumed to make the other redundant — see "Testing"
+for how each is verified separately.
 
 ## Getting started
 
-Requires Node 24.22.1+ (see `.nvmrc`). npm workspaces monorepo — one
+Requires Node 24 (the version in `.node-version`; `engines` asks for 24.22.1 or later). npm workspaces monorepo — one
 `npm install` at the root installs both apps.
 
 ```bash
@@ -91,15 +114,18 @@ Apply the migrations in order against your linked Supabase project —
 `0001` creates the schema and RLS policies, `0002` seeds two demo
 tenants (no `auth.users` rows, those come from real sign-ups), `0003`
 through `0007` add self-service tenant/member/resource creation and
-the owned-tenant cap, and `0008` adds `public.ping()`, the no-op
+the owned-tenant cap, `0008` adds `public.ping()`, the no-op
 function backing `GET /v1/health` (see the API table below and
-`.github/workflows/keep-alive.yml`):
+`.github/workflows/keep-alive.yml`), `0009` makes a booking point to a
+resource of its own tenant (it aborts if existing bookings already break
+that rule), and `0010` limits what an owner can change on a booking with
+a user JWT:
 
 ```bash
 psql "<your-supabase-connection-string>" \
   --single-transaction --variable ON_ERROR_STOP=1 \
   -f apps/api/supabase/migrations/0001_init.sql
-# repeat for 0002 through 0008, in order
+# repeat for 0002 through 0010, in order
 ```
 
 ```bash
@@ -122,37 +148,121 @@ checked against the caller's actual memberships on every request.
 | GET    | `/resources`               | any tenant member         | Active resources for the active tenant |
 | POST   | `/resources`               | owner                     | Create a resource for the active tenant |
 | GET    | `/bookings`                | any tenant member         | Bookings for the active tenant, optional `?resource_id=` |
-| POST   | `/bookings`                | owner, staff              | Create a booking; 409 on overlap (Postgres exclusion constraint) |
-| PATCH  | `/bookings/:id/cancel`     | owner                     | Cancel a confirmed booking |
+| POST   | `/bookings`                | owner, staff              | Create a booking; 409 on overlap (Postgres exclusion constraint), 404 for a resource that is not in the active tenant |
+| PATCH  | `/bookings/:id/cancel`     | owner                     | Cancel a confirmed booking; 404 if it is not in the active tenant, 409 if it is not confirmed |
 | GET    | `/health`                  | none (unauthenticated)    | Liveness check for Supabase keep-alive automation; touches no business table |
 
 ## Testing
 
-A [Bruno](https://www.usebruno.com/) collection lives in
-`apps/api/bruno/`, run against a real Supabase project rather than
-mocks:
+Four kinds of tests, each aimed at one thing. All of them run against a
+local Supabase stack, never against the demo project.
 
-- **`setup/`** — signs in directly against Supabase Auth's password
-  grant (not the backend, which has no login endpoint of its own) and
-  captures each JWT into an environment variable automatically via a
-  post-response script.
-- **`security-tests/`** — `00`/`00b` prove `AuthGuard` rejects a
-  missing or garbage token before anything else runs; `01`/`02` prove
-  `TenantGuard`/`RolesGuard` reject cross-tenant and wrong-role
-  requests; `03`/`04` are the ones that actually matter for this
-  project's core claim — they bypass the NestJS backend entirely and
-  query Supabase's PostgREST API directly with a real user JWT,
-  proving RLS itself filters cross-tenant rows (`200 []`) independent
-  of any application-layer guard, with a same-tenant control request
-  (`04`) confirming the empty result means isolation, not a broken
-  endpoint.
+- **Jest** (`apps/api/src/**/*.spec.ts`) — unit tests with no database.
+  They cover the guards, the exception filter and the intent of each
+  service: every tenant-scoped query carries the tenant filter, and the
+  tenant of a write comes from the request context, never from the
+  payload. They show what the code asks of the database, not that the
+  database rejects anything.
+- **pgTAP** (`apps/api/supabase/tests/database/`) — SQL-level tests of
+  what Postgres enforces by itself. `001` covers tenant isolation through
+  RLS. `002` covers the rule that a booking uses a resource of its own
+  tenant, with a user JWT and as the service role, including that the
+  rejection is the same whether the time slot is busy or free. `003`
+  covers what an owner may change on a booking with a user JWT.
+- **Bruno** (`apps/api/bruno/`) — HTTP tests against the running API and
+  against PostgREST, with no mocks:
+  - **`setup/`** — signs in directly against Supabase Auth's password
+    grant (not the backend, which has no login endpoint of its own) and
+    captures each JWT into an environment variable automatically via a
+    post-response script.
+  - **`security-tests/`** — `00`/`00b` prove `AuthGuard` rejects a
+    missing or garbage token before anything else runs; `01`/`02` prove
+    `TenantGuard`/`RolesGuard` reject cross-tenant and wrong-role
+    requests; `03`/`04` are the ones that actually matter for this
+    project's core claim — they bypass the NestJS backend entirely and
+    query Supabase's PostgREST API directly with a real user JWT,
+    proving RLS itself filters cross-tenant rows (`200 []`) independent
+    of any application-layer guard, with a same-tenant control request
+    (`04`) confirming the empty result means isolation, not a broken
+    endpoint; `05`/`05b` prove that a booking on a resource of another
+    tenant and a booking on a resource that does not exist get the
+    same 404.
+  - **`booking-cancel/`** — the cancellation lifecycle through the API:
+    a confirmed booking is cancelled, cancelling it again is a 409,
+    cancelling a booking that does not exist or one of another tenant
+    is the same 404, and a malformed id is a 400.
 - **`tests/03-concurrent-overlap-race.sh`** — a shell script, not a
   Bruno request, because proving the no-overlap exclusion constraint
   is race-safe requires two truly simultaneous requests, which a GUI
   REST client can't guarantee; two backgrounded `curl` calls can.
 
-A separate pgTAP suite (`apps/api/supabase/tests/`) exercises the same
-RLS surface at the SQL level.
+The CI workflow (`.github/workflows/ci.yml`) runs Jest, pgTAP and Bruno
+on every push and pull request. The race script is run by hand.
+
+### Running the tests
+
+Prerequisites: Node 24 (see `.node-version`), `npm install` at the repo
+root, Docker, and the
+[Supabase CLI](https://supabase.com/docs/guides/local-development). The
+pgTAP setup hook downloads its test helpers from database.dev, so the
+database tests need internet access.
+
+**Unit tests (Jest)** — no database or network needed:
+
+```bash
+npm test --workspace=apps/api
+```
+
+**Local Supabase stack** — every database and HTTP test below runs
+against it:
+
+```bash
+cd apps/api
+# Starts only what the tests need (database, auth, REST and the gateway), which
+# takes far less memory than a plain `supabase start`.
+supabase start --exclude studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta
+```
+
+**Database tests (pgTAP)** — with the stack running, from `apps/api`:
+
+```bash
+supabase test db
+```
+
+**HTTP tests (Bruno)** — with the stack running, build the API, start it
+against the stack, create the test users and data, and run the
+collection. Run these from `apps/api`:
+
+```bash
+npm run build
+eval "$(supabase status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
+SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+  PORT=3000 node dist/main &
+
+# Creates users and data on the local stack and writes
+# bruno/environments/local-stack.bru, which Git ignores because it holds
+# the test credentials. Safe to repeat: every run creates fresh data.
+bash bruno/setup-local.sh
+
+# Bruno CLI: npm install --global @usebruno/cli
+cd bruno
+bru run setup security-tests booking-cancel --env local-stack
+```
+
+You can also open `apps/api/bruno` in the Bruno app, select the
+`local-stack` environment, run `setup/` first, and then the other folders.
+The `local` and `localB` environments are empty templates for a Supabase
+project of your own.
+
+**Concurrent overlap race** — with the API running and the setup script
+already run, from `apps/api`:
+
+```bash
+bash bruno/tests/run-race.sh
+```
+
+It expects one `201` and one `409`, and picks a random time slot, so it
+can be repeated. Stop the stack with `supabase stop` when you are done.
 
 ## What this project demonstrates
 
@@ -191,7 +301,7 @@ RLS surface at the SQL level.
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
 **Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
 
-Two seeded tenants (Aurora Studio, Willow Creek Clinic) with demo
+Two seeded tenants (Aurora Studio, Riverside Clinic) with demo
 accounts across all three roles, so cross-tenant isolation and
 role-based access are visible without creating data first:
 
@@ -257,6 +367,8 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
       owned-tenant cap under concurrent requests from the same user
       (does not cross tenant boundaries — see inline comments on
       migration `0007` for both).
+
+      **Security Audit:** Independent RLS policy and isolation review conducted via AI-assisted adversarial analysis (using Anthropic's Claude), designed, directed, and verified by André Chacón. The comprehensive audit trail and vulnerability mapping are maintained as internal governance artifacts.
 - [x] Seed data + public deploy — backend on Railway, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.
@@ -266,4 +378,4 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+Apache License 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Multi-tenant bookings system demonstrating database-enforced tenant isolation with Postgres RLS. npm workspaces monorepo: apps/api (NestJS) + apps/web (React/Vite).",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "author": "André Chacón (@ArkonysDevJ)",
   "engines": {
     "node": ">=24.22.1"
   },

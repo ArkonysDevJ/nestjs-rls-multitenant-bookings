@@ -1,0 +1,23 @@
+meta {
+  name: 04 - Cancelling a nonexistent booking answers 404
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/bookings/99999999-9999-4999-8999-999999999999/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantAId}}
+}
+
+tests {
+  test("answers 404, never 500", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.body.message).to.equal("Booking not found.");
+  });
+}

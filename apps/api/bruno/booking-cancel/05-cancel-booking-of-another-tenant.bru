@@ -1,0 +1,32 @@
+meta {
+  name: 05 - Cancelling a booking of another tenant answers 404
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/bookings/{{bookingBId}}/cancel
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantAId}}
+}
+
+tests {
+  test("answers 404, the same as for a nonexistent booking (04)", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.body.message).to.equal("Booking not found.");
+    expect(res.body.statusCode).to.equal(404);
+  });
+}
+
+docs {
+  Requires bookingBId: a confirmed booking that belongs to tenantBId, which
+  the tenant A owner is not a member of. The response must be
+  indistinguishable from 04, otherwise it tells whether a booking of another
+  tenant exists. The booking must still be confirmed afterwards (checked in
+  the database, since no tenant A caller can read it).
+}

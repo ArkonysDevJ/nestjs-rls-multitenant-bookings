@@ -8,6 +8,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -50,7 +51,9 @@ export class BookingsController {
   @Roles('owner')
   async cancel(
     @Req() request: FastifyRequest,
-    @Param('id') id: string,
+    // A malformed id would reach Postgres as invalid uuid input (22P02) and
+    // surface as a 500; reject it as a 400 instead.
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<Booking> {
     const { tenantId } = request.tenantContext!;
     return this.bookingsService.cancel(tenantId, id);

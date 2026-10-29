@@ -1,0 +1,51 @@
+meta {
+  name: 01 - Staff creates a booking to cancel
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "{{resourceAId}}",
+    "startsAt": "{{slotStart}}",
+    "endsAt": "{{slotEnd}}"
+  }
+}
+
+script:pre-request {
+  // A random hour in a far-away decade, so a booking left confirmed by an
+  // interrupted run does not make the next run fail with an overlap.
+  const start = new Date(Date.UTC(2032, 0, 1) + Math.floor(Math.random() * 87600) * 3600000);
+  bru.setVar("slotStart", start.toISOString());
+  bru.setVar("slotEnd", new Date(start.getTime() + 3600000).toISOString());
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setVar("cancelTargetId", res.body.id);
+  }
+}
+
+tests {
+  test("creates a confirmed booking", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.body.status).to.equal("confirmed");
+  });
+}
+
+docs {
+  Creates the booking that the next requests cancel. The id is kept in the
+  runtime variable cancelTargetId.
+}

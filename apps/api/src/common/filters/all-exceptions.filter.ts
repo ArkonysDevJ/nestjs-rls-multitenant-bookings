@@ -19,6 +19,13 @@ interface PostgrestLikeError {
   details?: string;
 }
 
+// A booking whose resource belongs to another tenant (or does not exist) is
+// rejected by this composite foreign key. It is answered with a 404 that is
+// the same for both cases, so the response never tells whether a resource of
+// another tenant exists. Matched by constraint name because 23503 is also
+// raised by unrelated inserts, whose 409 must not change.
+const RESOURCE_TENANT_FK = 'bookings_resource_same_tenant_fk';
+
 const POSTGRES_CONFLICT_CODES = new Set([
   '23505', // unique_violation
   '23503', // foreign_key_violation
@@ -43,6 +50,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const pgError = exception as PostgrestLikeError;
+    if (
+      pgError?.code === '23503' &&
+      pgError.message?.includes(`"${RESOURCE_TENANT_FK}"`)
+    ) {
+      reply.status(HttpStatus.NOT_FOUND).send({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: 'The requested resource was not found.',
+        code: 'RESOURCE_NOT_FOUND',
+      });
+      return;
+    }
+
     if (pgError?.code && POSTGRES_CONFLICT_CODES.has(pgError.code)) {
       reply.status(HttpStatus.CONFLICT).send({
         statusCode: HttpStatus.CONFLICT,

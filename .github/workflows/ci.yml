@@ -1,0 +1,92 @@
+# Builds the API and the web app, runs the unit tests, then starts a local
+# Supabase stack and runs the database tests (pgTAP) and the HTTP security and
+# booking tests (Bruno) against it. Nothing here touches the deployed demo or
+# its database.
+#
+# The job is named `ci`: that is the check branch protection on `main`
+# requires, so a red run blocks the merge.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A clean checkout always builds from scratch. The API's tsconfig no
+      # longer uses incremental builds, so a repeated build cannot leave an
+      # empty dist/ either.
+      - name: Build API
+        run: npm run build:api
+
+      - name: Build web
+        run: npm run build:web
+
+      - name: Unit tests
+        run: npm test --workspace=apps/api -- --ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.101.0
+
+      - name: Start local Supabase
+        working-directory: apps/api
+        run: supabase start --exclude studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta
+
+      - name: Database tests (pgTAP)
+        working-directory: apps/api
+        run: supabase test db
+
+      - name: Start the API against the local stack
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" PORT=3000 \
+            nohup node dist/main > "$RUNNER_TEMP/api.log" 2>&1 &
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused \
+            http://127.0.0.1:3000/v1/health
+
+      - name: Prepare Bruno fixtures
+        working-directory: apps/api
+        run: bash bruno/setup-local.sh
+
+      # The CLI is installed outside the repository (no install scripts) and
+      # run from the collection folder: through npx inside an npm workspace it
+      # does not run at the collection root.
+      - name: Install Bruno CLI
+        run: npm install --prefix "$RUNNER_TEMP/bru" --ignore-scripts --no-audit --no-fund @usebruno/cli@4.3.0
+
+      - name: Integration tests (Bruno)
+        working-directory: apps/api/bruno
+        run: node "$RUNNER_TEMP/bru/node_modules/@usebruno/cli/bin/bru.js" run setup security-tests booking-cancel --env local-stack
+
+      - name: API log
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log" || true
