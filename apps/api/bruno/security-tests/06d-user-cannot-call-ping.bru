@@ -1,0 +1,32 @@
+meta {
+  name: 06d - A signed-in user cannot call ping
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/ping
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{staffAToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {}
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("a user JWT gets permission denied", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.code).to.equal("42501");
+  });
+}
