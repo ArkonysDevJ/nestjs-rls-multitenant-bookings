@@ -54,7 +54,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
 │   │       └── supabase/supabase.client.ts  # Shared service-role client
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0010, applied in order (see below)
+│   │   ├── migrations/                      # 0001-0011, applied in order (see below)
 │   │   └── tests/                           # pgTAP suite over the RLS surface
 │   └── bruno/                               # HTTP test collection and local fixtures script (see Testing)
 └── web/                                      # React + Vite dashboard
@@ -122,15 +122,21 @@ the owned-tenant cap, `0008` adds `public.ping()`, the no-op
 function backing `GET /v1/health` (see the API table below and
 `.github/workflows/keep-alive.yml`), `0009` makes a booking point to a
 resource of its own tenant (it aborts if existing bookings already break
-that rule), and `0010` limits what an owner can change on a booking with
-a user JWT:
+that rule), `0010` limits what an owner can change on a booking with
+a user JWT, and `0011` restricts who can execute the public functions:
 
 ```bash
-psql "<your-supabase-connection-string>" \
-  --single-transaction --variable ON_ERROR_STOP=1 \
-  -f apps/api/supabase/migrations/0001_init.sql
-# repeat for 0002 through 0010, in order
+cd apps/api
+supabase link --project-ref <your-project-ref>
+supabase migration list   # Local lists 0001-0011, Remote is empty on a new project
+supabase db push          # applies the missing ones in order and records them
 ```
+
+Run these from `apps/api`: the root `supabase/` folder has no migrations. If
+you applied some by hand with `psql` instead, `db push` would try to apply
+them again; first record them with
+`supabase migration repair --status applied <versions>` and check that
+`migration list` shows both columns filled.
 
 ```bash
 npm run dev:api    # NestJS on :3000
@@ -172,7 +178,8 @@ local Supabase stack, never against the demo project.
   RLS. `002` covers the rule that a booking uses a resource of its own
   tenant, with a user JWT and as the service role, including that the
   rejection is the same whether the time slot is busy or free. `003`
-  covers what an owner may change on a booking with a user JWT.
+  covers what an owner may change on a booking with a user JWT. `004`
+  covers who can execute each public function.
 - **Bruno** (`apps/api/bruno/`) — HTTP tests against the running API and
   against PostgREST, with no mocks:
   - **`setup/`** — signs in directly against Supabase Auth's password
@@ -190,7 +197,10 @@ local Supabase stack, never against the demo project.
     (`04`) confirming the empty result means isolation, not a broken
     endpoint; `05`/`05b` prove that a booking on a resource of another
     tenant and a booking on a resource that does not exist get the
-    same 404.
+    same 404; `06`–`06f` prove that `anon` and a signed-in user cannot call
+    `find_user_id_by_email` or `ping`, while the functions the policies need
+    still work; `07` proves a malformed tenant header is a 401; `08`/`08b`
+    prove a booking that ends at or before its start is a 400.
   - **`booking-cancel/`** — the cancellation lifecycle through the API:
     a confirmed booking is cancelled, cancelling it again is a 409,
     cancelling a booking that does not exist or one of another tenant

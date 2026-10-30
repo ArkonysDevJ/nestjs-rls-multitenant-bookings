@@ -41,7 +41,7 @@ apps/
         testing/              recordSupabase helper for service specs (kept out of the build)
     supabase/
       config.toml             local stack configuration
-      migrations/             0001 ... 0010, applied in order
+      migrations/             0001 ... 0011, applied in order
       tests/database/         pgTAP: 000 setup hook, 001-003
     bruno/                    HTTP collection, setup-local.sh, race scripts, environments/
     Dockerfile                two-stage image on node:24.22.1-slim
@@ -138,14 +138,20 @@ All tables live in the `public` schema, with RLS enabled **and forced**.
 `tenants`, `members` and `resources`, and on `bookings` can `insert` and
 `update (status)` only. `service_role` has everything. No table is granted to `anon`.
 
-**Functions** (`security definer`, fixed `search_path`):
+**Functions** (`security definer`, fixed `search_path`). Supabase grants
+`EXECUTE` on new functions to `anon`, `authenticated` and `service_role`
+explicitly, and `revoke ... from public` does not remove those grants, so
+migration `0011` revokes them by role and grants back only what is needed:
 
-| Function | Used by | Purpose |
-|---|---|---|
-| `tenant_has_members(uuid)` | the member-insert policy | tells whether a tenant is still unclaimed, without being filtered by the caller's own visibility |
-| `owned_tenant_count()` | the member-insert policy | counts the caller's owned tenants (no parameter, so it cannot be asked about someone else) |
-| `find_user_id_by_email(text)` | the API (service role) | resolves an invitee by email |
-| `ping()` | the API (service role) | backs `GET /v1/health` without touching a business table |
+| Function | Used by | Who can execute | Purpose |
+|---|---|---|---|
+| `tenant_has_members(uuid)` | the member-insert policy | `authenticated`, `service_role` | tells whether a tenant is still unclaimed, without being filtered by the caller's own visibility |
+| `owned_tenant_count()` | the member-insert policy | `authenticated`, `service_role` | counts the caller's owned tenants (no parameter, so it cannot be asked about someone else) |
+| `find_user_id_by_email(text)` | the API | `service_role` only | resolves an invitee by email; open to other roles it would let anyone test which emails are registered |
+| `ping()` | the API | `service_role` only | backs `GET /v1/health` without touching a business table |
+
+The two policy functions stay executable by `authenticated` because the
+member-insert policy runs as the caller. `anon` cannot execute any of them.
 
 ## 5. Errors
 
@@ -155,8 +161,12 @@ All tables live in the `public` schema, with RLS enabled **and forced**.
 |---|---|
 | Any Nest `HttpException` | its own status and body |
 | `23503` from `bookings_resource_same_tenant_fk` | 404 `{ statusCode, message: "The requested resource was not found.", code: "RESOURCE_NOT_FOUND" }` |
+| `23514` from `valid_range` (a booking that ends at or before its start) | 400 `{ statusCode, message: "The end of a booking must be after its start.", code: "INVALID_TIME_RANGE" }` |
 | `23505`, other `23503`, `23P01` | 409 (`23P01` has a message about overlapping bookings) |
 | Anything else | 500 `{ statusCode: 500, message: "Internal server error." }`, logged; the database message is never returned |
+
+A malformed `x-tenant-id` header never reaches the database: `TenantGuard`
+checks its shape and answers 401 (`Invalid x-tenant-id header.`).
 
 The booking service adds its own cases: cancelling a booking that is missing
 or belongs to another tenant is a 404 (`Booking not found.`, the same in both
@@ -187,17 +197,23 @@ cases), and cancelling one that is not confirmed is a 409.
 | Layer | What it proves | Where |
 |---|---|---|
 | Jest | Guards, the exception filter, and the **intent** of each service: the tenant filter is present with the value it was given, and a write takes its tenant from the context, not the payload. It does not show the database rejecting anything | `apps/api/src/**/*.spec.ts` |
-| pgTAP | What Postgres enforces by itself, for a user JWT and as the service role. `001` tenant isolation by RLS; `002` a booking uses a resource of its own tenant (same error for busy and free slots); `003` what an owner may change on a booking | `apps/api/supabase/tests/database/` |
-| Bruno | HTTP behaviour against the running API and PostgREST: auth and role guards, RLS through PostgREST, the cross-tenant 404, the cancellation lifecycle | `apps/api/bruno/` |
+| pgTAP | What Postgres enforces by itself, for a user JWT and as the service role. `001` tenant isolation by RLS; `002` a booking uses a resource of its own tenant (same error for busy and free slots); `003` what an owner may change on a booking; `004` who can execute each public function (read from the catalog, plus the calls that must still work) | `apps/api/supabase/tests/database/` |
+| Bruno | HTTP behaviour against the running API and PostgREST: auth and role guards, RLS through PostgREST, the cross-tenant 404, the refused calls to the restricted functions (`06`–`06f`), the 401 for a malformed tenant header (`07`), the 400 for a bad time range (`08`, `08b`), the cancellation lifecycle | `apps/api/bruno/` |
 | Race script | Two simultaneous bookings for the same slot: one 201 and one 409 | `apps/api/bruno/tests/` |
 
 All of it runs against a local Supabase stack. `ci.yml` runs Jest, pgTAP and
-Bruno (plus the API and web builds) on every push and pull request; the race
-script is run by hand. A security rule is considered covered when a test fails
+Bruno (plus the API and web builds and the Docker image build) on every push
+and pull request; the race script is run by hand. A security rule is considered covered when a test fails
 before the change and passes after it for the expected reason.
 
 Limits: a unit spec cannot detect a **new** service method that forgets the
-tenant filter. CI does not build the Docker image.
+tenant filter. The Docker image is built in CI but never run there.
+
+The local Postgres 17.6 can crash the connection when a role calls a function
+it has no `EXECUTE` on over the simple query protocol (`psql`, pgTAP). The
+same call through PostgREST answers normally. For that reason pgTAP `004`
+reads the privileges from the catalog and the refused calls are covered over
+HTTP by Bruno `06`–`06f`.
 
 ## 8. Deployment
 
@@ -205,6 +221,10 @@ tenant filter. CI does not build the Docker image.
   Railway's builder (Railpack), which runs `npm install`, `npm run build:api` and
   `npm run start` and takes the Node version from `.node-version`. **Web** on Vercel. **Database and auth** on Supabase.
 - Branch protection on `main`: pull request required, `ci` must pass.
+- Migrations on the demo database are applied from `apps/api` with
+  `supabase db push` after `supabase link`. The history table is aligned
+  with `0001`–`0011` (the first ones were applied by hand with `psql`).
+  Run the CLI from `apps/api`: the root `supabase/` folder has no migrations.
 - `apps/api/Dockerfile` builds the API into a two-stage image on
   `node:24.22.1-slim` that runs as the unprivileged `node` user, listens on
   `PORT` (3000 by default) on `0.0.0.0`, keeps no local state and exits cleanly
@@ -225,8 +245,7 @@ cross-tenant leak.
 
 | Behaviour | Verified |
 |---|---|
-| A booking whose `endsAt` is equal to or before `startsAt` is rejected by the `valid_range` check, but the error (`23514`) is not mapped, so the API answers 500 instead of 400 | Run |
-| A malformed `x-tenant-id` makes the membership query fail with an invalid-UUID error, and the API answers 500 instead of 401 | Run |
+| Inserting a row in `members` with a user JWT straight through PostgREST fails with `42P17` (infinite recursion detected in the policy). The API inserts members with the service role, so no route is affected | Run (pgTAP) |
 | `tenant_has_members(uuid)` answers, for any tenant id, whether it has members. It is needed to bootstrap a tenant and reveals nothing but existence | Documented in migration `0007` |
 | The owned-tenant cap (5) is checked before the insert, so two simultaneous requests from the same user can pass it | Documented in migration `0007` |
 | `GET /tenants/me` returns an empty list if the tenants query fails, instead of an error | Code reading |

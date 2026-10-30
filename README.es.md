@@ -39,7 +39,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Traduce códigos de error de Postgres a HTTP
 │   │       └── supabase/supabase.client.ts  # Cliente service-role compartido
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0010, aplicadas en orden (ver abajo)
+│   │   ├── migrations/                      # 0001-0011, aplicadas en orden (ver abajo)
 │   │   └── tests/                           # Suite pgTAP sobre la superficie de RLS
 │   └── bruno/                               # Colección de tests HTTP y script de datos locales (ver Testing)
 └── web/                                      # Dashboard React + Vite
@@ -88,14 +88,16 @@ VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
 VITE_API_URL=http://localhost:3000/v1
 ```
 
-Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) y `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario:
+Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario y `0011` restringe quién puede ejecutar las funciones públicas:
 
 ```bash
-psql "<tu-connection-string-de-supabase>" \
-  --single-transaction --variable ON_ERROR_STOP=1 \
-  -f apps/api/supabase/migrations/0001_init.sql
-# repetir para 0002 a 0010, en orden
+cd apps/api
+supabase link --project-ref <tu-project-ref>
+supabase migration list   # Local lista 0001-0011; Remote está vacío en un proyecto nuevo
+supabase db push          # aplica las faltantes en orden y las registra
 ```
+
+Ejecuta esto desde `apps/api`: la carpeta `supabase/` de la raíz no tiene migraciones. Si aplicaste alguna a mano con `psql`, `db push` intentaría aplicarla otra vez; antes regístrala con `supabase migration repair --status applied <versiones>` y comprueba que `migration list` muestre ambas columnas llenas.
 
 ```bash
 npm run dev:api    # NestJS en :3000

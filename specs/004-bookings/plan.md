@@ -45,5 +45,7 @@ a different error than at a free slot.
 | pgTAP, resource of the same tenant | `apps/api/supabase/tests/database/002-booking-resource-ownership.test.sql` |
 | pgTAP, what an owner may change | `apps/api/supabase/tests/database/003-booking-owner-update-limits.test.sql` |
 | Bruno, cross-tenant 404 | `apps/api/bruno/security-tests/05-*.bru`, `05b-*.bru` |
+| Jest, filter (404 for the foreign key, 400 for `valid_range`) | `apps/api/src/common/filters/all-exceptions.filter.spec.ts` |
+| Bruno, bad time range | `apps/api/bruno/security-tests/08-*.bru`, `08b-*.bru` |
 | Bruno, cancellation lifecycle | `apps/api/bruno/booking-cancel/` |
 | Race, one 201 and one 409 | `apps/api/bruno/tests/03-concurrent-overlap-race.sh` |

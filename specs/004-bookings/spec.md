@@ -27,7 +27,8 @@ Headers: `Authorization`, `x-tenant-id`. Body:
 | `resourceId` does not exist | They book it | the **same** 404 as above, whether the slot of the foreign resource is busy or free |
 | A viewer | They book | 403 |
 | Body has an unknown property (for example `tenant_id`) or `resourceId` is not a UUID | They book | 400 |
-| Caller is not a member of `x-tenant-id` | They book | 401 |
+| `endsAt` is equal to or before `startsAt` | They book | 400 `{ statusCode: 400, message: "The end of a booking must be after its start.", code: "INVALID_TIME_RANGE" }` |
+| Caller is not a member of `x-tenant-id`, or the header is not a UUID | They book | 401 |
 
 ### List bookings — `GET /v1/bookings[?resource_id=<uuid>]`
 
@@ -65,8 +66,3 @@ resource. A `resource_id` that is not a UUID is a 400.
 ## Out of scope
 
 Rescheduling, partial cancellation, recurring bookings, notifications.
-
-## Known gap
-
-A booking with `endsAt` equal to or before `startsAt` is rejected by the
-database but the API answers 500 instead of 400 (see `tasks.md`).

@@ -13,5 +13,6 @@ Status: `[x]` done, `[ ]` open.
 ## Open
 
 - [ ] Add a Bruno request for a successful invitation, a duplicate (409) and an unknown email (404) under `apps/api/bruno/`.
+- [ ] Inserting a member with a user JWT straight on the database fails with `42P17` (infinite recursion in the policy). Find the cause before testing the policy; the API route uses the service role and is not affected.
 - [ ] Add a pgTAP test for the member-insert policy: an owner can add `staff`/`viewer`; nobody can add an `owner` to a tenant that already has members — `apps/api/supabase/tests/database/`.
 - [ ] Removing a member and changing a role are not implemented. Each needs a route, a policy, a grant and tests.
