@@ -93,7 +93,7 @@ for how each is verified separately.
 
 ## Getting started
 
-Requires Node 22 (the version in `.node-version`). npm workspaces monorepo — one
+Requires Node 24 (the version in `.node-version`; `engines` asks for 24.22.1 or later). npm workspaces monorepo — one
 `npm install` at the root installs both apps.
 
 ```bash
@@ -196,12 +196,13 @@ local Supabase stack, never against the demo project.
   is race-safe requires two truly simultaneous requests, which a GUI
   REST client can't guarantee; two backgrounded `curl` calls can.
 
-The CI workflow (`.github/workflows/ci.yml`) runs Jest, pgTAP and Bruno
-on every push and pull request. The race script is run by hand.
+The CI workflow (`.github/workflows/ci.yml`) builds the API, the web app and the
+container image, and runs Jest, pgTAP and Bruno, on every push and pull request.
+The race script is run by hand.
 
 ### Running the tests
 
-Prerequisites: Node 22 (see `.node-version`), `npm install` at the repo
+Prerequisites: Node 24 (see `.node-version`), `npm install` at the repo
 root, Docker, and the
 [Supabase CLI](https://supabase.com/docs/guides/local-development). The
 pgTAP setup hook downloads its test helpers from database.dev, so the
@@ -310,6 +311,36 @@ role-based access are visible without creating data first:
 | `demo-owner@arkonysdevj.com` | `arkonys2026` | owner |
 | `demo-staff@arkonysdevj.com` | `arkonys2026` | staff |
 | `demo-viewer@arkonysdevj.com` | `arkonys2026` | viewer |
+
+## Deployment decisions
+
+**Node 24 is pinned** (`engines: >=24.22.1`, `.nvmrc`, `.node-version`)
+because 24.22.1 is the first 24.x release carrying the
+[October 2026 security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+Without a declared version, the builder that deploys the backend picks
+one on its own.
+
+**Why Docker.** `apps/api/Dockerfile` turns the API into an image whose
+runtime is fixed by its base tag (`node:24.22.1-slim`) instead of being
+resolved by a builder at deploy time. The same image runs locally and on
+any container host, carrying only `dist/` and production dependencies.
+Build it from the repository root: `docker build -f apps/api/Dockerfile .`
+
+| | Railway | Cloud Run |
+|---|---|---|
+| Cost with little traffic | The container is billed while it runs, which is all the time unless sleeping is enabled | Scales to zero; idle time is not billed |
+| Cold start | None by default: the instance stays up | The first request after idle waits for an instance to start, unless a minimum instance count is kept |
+| Authentication | Public URL; access control is left to the app (here, the Supabase JWT guards) | Public, or restricted to IAM-authenticated callers by the platform itself |
+| How the Node version is pinned | Nixpacks derives it from `engines` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
+| Who builds the image | Railway, from the repository, on every deploy | You or your CI (or Cloud Build), pushing to a registry |
+
+This repository runs its backend on Railway (see "Live demo"), where it
+already lives; the Dockerfile moves the Node version decision into the
+repository instead of leaving it to the builder.
+
+**Image contract:** listens on `PORT` (3000 if unset) on `0.0.0.0`, keeps
+no local state (all data is in Supabase), logs to stdout/stderr, and shuts
+down cleanly on `SIGTERM` — any host that honours those can run it.
 
 ## Status
 

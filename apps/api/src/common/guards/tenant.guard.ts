@@ -36,6 +36,11 @@ declare module 'fastify' {
   }
 }
 
+// Any UUID shape Postgres accepts, whatever its version (the seeded tenant ids
+// are not version 4). A value that does not look like this can never match a
+// membership, and sending it to the database would only fail there.
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class TenantGuard implements CanActivate {
   constructor(private readonly membersService: MembersService) {}
@@ -89,6 +94,10 @@ export class TenantGuard implements CanActivate {
 
     if (!tenantId) {
       throw new UnauthorizedException('Missing x-tenant-id header.');
+    }
+
+    if (!UUID_SHAPE.test(tenantId)) {
+      throw new UnauthorizedException('Invalid x-tenant-id header.');
     }
 
     return tenantId;

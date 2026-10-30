@@ -5,6 +5,9 @@
   "description": "Backend: NestJS + Postgres RLS multi-tenant bookings API.",
   "license": "Apache-2.0",
   "author": "André Chacón (@ArkonysDevJ)",
+  "engines": {
+    "node": ">=24.22.1"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",

@@ -68,7 +68,7 @@ Ninguna barrera se asume redundante frente a la otra — ver "Testing" para cóm
 
 ## Cómo empezar
 
-Requiere Node 22 (la versión de `.node-version`). Monorepo con npm workspaces — un solo `npm install` en la raíz instala ambas apps.
+Requiere Node 24 (la versión de `.node-version`; `engines` pide 24.22.1 o superior). Monorepo con npm workspaces — un solo `npm install` en la raíz instala ambas apps.
 
 ```bash
 npm install
@@ -126,11 +126,11 @@ Cuatro tipos de pruebas, cada una enfocada en algo concreto. Todas corren contra
   - **`booking-cancel/`** — el ciclo de cancelación a través de la API: una reserva confirmada se cancela, cancelarla otra vez es un 409, cancelar una reserva que no existe o una de otro tenant da el mismo 404, y un id mal formado da 400.
 - **`tests/03-concurrent-overlap-race.sh`** — un shell script, no una petición de Bruno, porque probar que el exclusion constraint de no-overlap es race-safe requiere dos peticiones genuinamente simultáneas, algo que un cliente REST gráfico no puede garantizar; dos llamadas `curl` en background sí.
 
-El workflow de CI (`.github/workflows/ci.yml`) corre Jest, pgTAP y Bruno en cada push y pull request. El script de carrera se corre a mano.
+El workflow de CI (`.github/workflows/ci.yml`) compila la API, la web y la imagen del contenedor, y corre Jest, pgTAP y Bruno, en cada push y pull request. El script de carrera se corre a mano.
 
 ### Ejecutar las pruebas
 
-Requisitos previos: Node 22 (ver `.node-version`), `npm install` en la raíz del repo, Docker y la [CLI de Supabase](https://supabase.com/docs/guides/local-development). El hook de preparación de pgTAP descarga sus helpers de prueba desde database.dev, así que las pruebas de base de datos requieren acceso a internet.
+Requisitos previos: Node 24 (ver `.node-version`), `npm install` en la raíz del repo, Docker y la [CLI de Supabase](https://supabase.com/docs/guides/local-development). El hook de preparación de pgTAP descarga sus helpers de prueba desde database.dev, así que las pruebas de base de datos requieren acceso a internet.
 
 **Pruebas unitarias (Jest)** — no necesitan base de datos ni red:
 
@@ -201,6 +201,24 @@ Dos tenants sembrados (Aurora Studio, Riverside Clinic) con cuentas demo en los 
 | `demo-owner@arkonysdevj.com` | `arkonys2026` | owner |
 | `demo-staff@arkonysdevj.com` | `arkonys2026` | staff |
 | `demo-viewer@arkonysdevj.com` | `arkonys2026` | viewer |
+
+## Decisiones de despliegue
+
+**Node 24 queda fijado** (`engines: >=24.22.1`, `.nvmrc`, `.node-version`) porque 24.22.1 es la primera versión 24.x con las [correcciones de seguridad de octubre de 2026](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). Sin una versión declarada, el builder que despliega el backend elige una por su cuenta.
+
+**Por qué Docker.** `apps/api/Dockerfile` convierte la API en una imagen cuyo runtime lo fija la etiqueta base (`node:24.22.1-slim`), en vez de resolverlo un builder al momento de desplegar. La misma imagen corre en local y en cualquier host de contenedores, y solo lleva `dist/` y las dependencias de producción. Se construye desde la raíz del repositorio: `docker build -f apps/api/Dockerfile .`
+
+| | Railway | Cloud Run |
+|---|---|---|
+| Costo con poco tráfico | El contenedor se cobra mientras corre, es decir, todo el tiempo salvo que se active el modo de suspensión | Escala a cero; el tiempo inactivo no se cobra |
+| Arranque en frío | Ninguno por defecto: la instancia sigue activa | La primera petición tras un periodo inactivo espera a que arranque una instancia, salvo que se mantenga un mínimo de instancias |
+| Autenticación | URL pública; el control de acceso queda en la app (aquí, los guards con JWT de Supabase) | Pública, o restringida por la propia plataforma a llamadas autenticadas con IAM |
+| Cómo se fija la versión de Node | Nixpacks la deduce de `engines` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
+| Quién compila la imagen | Railway, desde el repositorio, en cada despliegue | Uno mismo o el CI (o Cloud Build), subiéndola a un registro |
+
+Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya está desplegado; el Dockerfile lleva la decisión de la versión de Node al repositorio en vez de dejársela al builder.
+
+**Contrato de la imagen:** escucha en `PORT` (3000 si no está definido) en `0.0.0.0`, no guarda estado local (todos los datos están en Supabase), escribe los logs en stdout/stderr y se cierra de forma ordenada con `SIGTERM`; cualquier host que cumpla eso puede ejecutarla.
 
 ## Estado
 
