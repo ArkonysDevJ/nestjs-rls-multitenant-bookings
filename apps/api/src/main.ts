@@ -35,6 +35,9 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
   app.setGlobalPrefix('v1');
+  // Container platforms stop instances with SIGTERM; closing the app on it
+  // lets in-flight requests finish instead of being cut off.
+  app.enableShutdownHooks();
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port, '0.0.0.0');

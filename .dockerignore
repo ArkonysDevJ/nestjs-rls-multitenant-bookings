@@ -1,0 +1,31 @@
+# Build context for apps/api/Dockerfile. Anything not listed in its COPY
+# lines is excluded so it can neither leak into an image nor bust the cache.
+
+# Installed and compiled inside the image, never copied from the host.
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+# Credentials come from the platform's environment at runtime; a .env file in
+# the image would ship the service-role key with every pull.
+**/.env
+**/.env.*
+
+# Frontend: deployed on its own. Only its manifest is needed for npm ci.
+apps/web/*
+!apps/web/package.json
+
+# Not read by the running API: migrations and pgTAP tests are applied to the
+# database separately, Bruno collections are for manual/security testing.
+apps/api/supabase
+apps/api/bruno
+**/*.spec.ts
+
+# Repository metadata and docs.
+.git
+.github
+docs
+pake
+**/*.md
+**/*.log
+coverage
