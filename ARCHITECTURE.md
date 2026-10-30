@@ -201,8 +201,9 @@ tenant filter. CI does not build the Docker image.
 
 ## 8. Deployment
 
-- **API** on Railway, built by Nixpacks from the repository on each push to
-  `main`. **Web** on Vercel. **Database and auth** on Supabase.
+- **API** on Railway, built from the repository on each push to `main` by
+  Railway's builder (Railpack), which runs `npm install`, `npm run build:api` and
+  `npm run start` and takes the Node version from `.node-version`. **Web** on Vercel. **Database and auth** on Supabase.
 - Branch protection on `main`: pull request required, `ci` must pass.
 - `apps/api/Dockerfile` builds the API into a two-stage image on
   `node:24.22.1-slim` that runs as the unprivileged `node` user, listens on

@@ -217,7 +217,7 @@ Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres ro
 | Costo con poco tráfico | El contenedor se cobra mientras corre, es decir, todo el tiempo salvo que se active el modo de suspensión | Escala a cero; el tiempo inactivo no se cobra |
 | Arranque en frío | Ninguno por defecto: la instancia sigue activa | La primera petición tras un periodo inactivo espera a que arranque una instancia, salvo que se mantenga un mínimo de instancias |
 | Autenticación | URL pública; el control de acceso queda en la app (aquí, los guards con JWT de Supabase) | Pública, o restringida por la propia plataforma a llamadas autenticadas con IAM |
-| Cómo se fija la versión de Node | Nixpacks la deduce de `engines` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
+| Cómo se fija la versión de Node | Railpack la lee de `.node-version` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
 | Quién compila la imagen | Railway, desde el repositorio, en cada despliegue | Uno mismo o el CI (o Cloud Build), subiéndola a un registro |
 
 Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya está desplegado; el Dockerfile lleva la decisión de la versión de Node al repositorio en vez de dejársela al builder.

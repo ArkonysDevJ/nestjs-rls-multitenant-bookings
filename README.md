@@ -334,7 +334,7 @@ Build it from the repository root: `docker build -f apps/api/Dockerfile .`
 | Cost with little traffic | The container is billed while it runs, which is all the time unless sleeping is enabled | Scales to zero; idle time is not billed |
 | Cold start | None by default: the instance stays up | The first request after idle waits for an instance to start, unless a minimum instance count is kept |
 | Authentication | Public URL; access control is left to the app (here, the Supabase JWT guards) | Public, or restricted to IAM-authenticated callers by the platform itself |
-| How the Node version is pinned | Nixpacks derives it from `engines` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
+| How the Node version is pinned | Railpack reads `.node-version` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
 | Who builds the image | Railway, from the repository, on every deploy | You or your CI (or Cloud Build), pushing to a registry |
 
 This repository runs its backend on Railway (see "Live demo"), where it
