@@ -1,0 +1,32 @@
+meta {
+  name: 07 - A malformed x-tenant-id is refused with 401
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/resources
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: not-a-uuid
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("answers 401, not 500", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
+
+docs {
+  A tenant id that is not a UUID can never match a membership. It must be
+  refused by TenantGuard like any other bad header, not reach Postgres and come
+  back as an internal error.
+}
