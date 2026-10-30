@@ -1,0 +1,40 @@
+meta {
+  name: 06 - The public key alone cannot look up a user by email
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/find_user_id_by_email
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "lookup_email": "{{ownerAEmail}}"
+  }
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("anon gets permission denied, not a user id", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.body.code).to.equal("42501");
+  });
+}
+
+docs {
+  find_user_id_by_email is for the API, which calls it with the service
+  role. Called with only the project's public key it must be refused;
+  otherwise it would tell anyone which emails have an account and what their
+  user id is. Goes straight to PostgREST, bypassing the NestJS backend.
+}
