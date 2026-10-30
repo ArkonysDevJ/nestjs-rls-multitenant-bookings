@@ -6,7 +6,7 @@
 
 ![Vista de reservas — permite seleccionar un tenant activo, crear recursos con capacidades y gestionar nuevas reservas](docs/assets/bookings.png)
 
-**Estado: desplegado.** El backend y el frontend están implementados, los tests de seguridad se ejecutaron de punta a punta contra una instancia real de Supabase (incluyendo una ronda de auditoría independiente sobre la capa de políticas RLS), y la app está en vivo con datos semilla — ver "Demo en vivo" abajo.
+**Estado: desplegado.** El backend y el frontend están implementados, los tests de seguridad se ejecutaron de punta a punta contra una instancia real de Supabase (incluyendo una ronda de revisión adversarial sobre la capa de políticas RLS), y la app está en vivo con datos semilla — ver "Demo en vivo" abajo.
 
 ## Qué es esto
 
@@ -19,6 +19,10 @@ Un sistema de reservas multi-tenant donde el aislamiento entre tenants está gar
 - Monorepo con npm workspaces.
 
 ## Arquitectura
+
+El diseño completo (rutas de acceso, modelo de datos, políticas, despliegue y limitaciones conocidas)
+está en [ARCHITECTURE.md](ARCHITECTURE.md). El comportamiento de cada funcionalidad de la API está en
+[specs/](specs/), y [AGENTS.md](AGENTS.md) reúne las reglas para agentes de código con IA.
 
 ```
 apps/
@@ -35,7 +39,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Traduce códigos de error de Postgres a HTTP
 │   │       └── supabase/supabase.client.ts  # Cliente service-role compartido
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0010, aplicadas en orden (ver abajo)
+│   │   ├── migrations/                      # 0001-0011, aplicadas en orden (ver abajo)
 │   │   └── tests/                           # Suite pgTAP sobre la superficie de RLS
 │   └── bruno/                               # Colección de tests HTTP y script de datos locales (ver Testing)
 └── web/                                      # Dashboard React + Vite
@@ -84,14 +88,16 @@ VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
 VITE_API_URL=http://localhost:3000/v1
 ```
 
-Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) y `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario:
+Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario y `0011` restringe quién puede ejecutar las funciones públicas:
 
 ```bash
-psql "<tu-connection-string-de-supabase>" \
-  --single-transaction --variable ON_ERROR_STOP=1 \
-  -f apps/api/supabase/migrations/0001_init.sql
-# repetir para 0002 a 0010, en orden
+cd apps/api
+supabase link --project-ref <tu-project-ref>
+supabase migration list   # Local lista 0001-0011; Remote está vacío en un proyecto nuevo
+supabase db push          # aplica las faltantes en orden y las registra
 ```
+
+Ejecuta esto desde `apps/api`: la carpeta `supabase/` de la raíz no tiene migraciones. Si aplicaste alguna a mano con `psql`, `db push` intentaría aplicarla otra vez; antes regístrala con `supabase migration repair --status applied <versiones>` y comprueba que `migration list` muestre ambas columnas llenas.
 
 ```bash
 npm run dev:api    # NestJS en :3000
@@ -194,7 +200,7 @@ Espera un `201` y un `409`, y elige un horario aleatorio, así que se puede repe
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
 **Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
 
-Dos tenants sembrados (Aurora Studio, Riverside Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
+Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
 
 | Email | Password | Rol |
 |---|---|---|
@@ -213,21 +219,32 @@ Dos tenants sembrados (Aurora Studio, Riverside Clinic) con cuentas demo en los 
 | Costo con poco tráfico | El contenedor se cobra mientras corre, es decir, todo el tiempo salvo que se active el modo de suspensión | Escala a cero; el tiempo inactivo no se cobra |
 | Arranque en frío | Ninguno por defecto: la instancia sigue activa | La primera petición tras un periodo inactivo espera a que arranque una instancia, salvo que se mantenga un mínimo de instancias |
 | Autenticación | URL pública; el control de acceso queda en la app (aquí, los guards con JWT de Supabase) | Pública, o restringida por la propia plataforma a llamadas autenticadas con IAM |
-| Cómo se fija la versión de Node | Nixpacks la deduce de `engines` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
+| Cómo se fija la versión de Node | Railpack la lee de `.node-version` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
 | Quién compila la imagen | Railway, desde el repositorio, en cada despliegue | Uno mismo o el CI (o Cloud Build), subiéndola a un registro |
 
 Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya está desplegado; el Dockerfile lleva la decisión de la versión de Node al repositorio en vez de dejársela al builder.
 
 **Contrato de la imagen:** escucha en `PORT` (3000 si no está definido) en `0.0.0.0`, no guarda estado local (todos los datos están en Supabase), escribe los logs en stdout/stderr y se cierra de forma ordenada con `SIGTERM`; cualquier host que cumpla eso puede ejecutarla.
 
+## Cómo se hacen los cambios
+
+Un cambio empieza como una spec escrita en `specs/`. Se implementa en una rama
+y llega como pull request. El check `ci` es obligatorio y debe pasar; luego una
+persona revisa el diff contra la spec antes de fusionarlo. `main` está
+protegida y fusionar despliega.
+
 ## Estado
 
 - [x] Backend: módulos tenants/members/resources/bookings, guards, migraciones RLS, exclusion constraint de no-overlap.
 - [x] Frontend: auth, selector de tenant, vistas de recursos + reservas, acciones restringidas por rol.
 - [x] Tests de seguridad ejecutados contra una instancia real de Supabase (`apps/api/bruno`) — esta es la afirmación central del proyecto y ya está verificada de punta a punta: peticiones sin autenticación/con token inválido rechazadas, acceso cross-tenant rechazado tanto en la capa de aplicación COMO independientemente vía queries directas a PostgREST contra RLS (evitando el backend por completo), aplicación de rol rechazada para acciones no permitidas, y el exclusion constraint de no-overlap probado race-safe bajo dos peticiones genuinamente concurrentes.
-- [x] Auditoría de seguridad independiente sobre la capa de políticas RLS (creación de tenant/member por autoservicio, recursos creados por el owner, límite de tenants propios) — un hallazgo corregido (un oráculo de enumeración en un helper `SECURITY DEFINER`, cerrado vinculándolo al JWT del propio solicitante en vez de a un parámetro externo), dos hallazgos aceptados como trade-offs deliberados y documentados, no bugs: un oráculo estrecho de existencia necesario para arrancar un tenant nuevo, y una race condition conocida en el límite de tenants propios bajo peticiones concurrentes del mismo usuario (no cruza límites de tenant — ver comentarios inline en la migración `0007` para ambos).
+- [x] Revisión de seguridad adversarial sobre la capa de políticas RLS (creación de tenant/member por autoservicio, recursos creados por el owner, límite de tenants propios) — un hallazgo corregido (un oráculo de enumeración en un helper `SECURITY DEFINER`, cerrado vinculándolo al JWT del propio solicitante en vez de a un parámetro externo), dos hallazgos aceptados como trade-offs deliberados y documentados, no bugs: un oráculo estrecho de existencia necesario para arrancar un tenant nuevo, y una race condition conocida en el límite de tenants propios bajo peticiones concurrentes del mismo usuario (no cruza límites de tenant — ver comentarios inline en la migración `0007` para ambos).
 
-      **Auditoría de Seguridad:** Revisión técnica de seguridad y políticas RLS realizada mediante análisis adversarial asistido por Inteligencia Artificial (utilizando Claude de Anthropic), diseñada, dirigida y verificada por André Chacón. El informe exhaustivo de hallazgos se custodia como artefacto interno de gobernanza.
+      **Cómo se hizo esta revisión:** una revisión adversarial de la capa de
+      políticas RLS asistida por IA, diseñada, dirigida y verificada por el autor
+      (no es una auditoría de terceros). Cada hallazgo está cubierto por los tests
+      pgTAP de `apps/api/supabase/tests/database/` y por los comentarios de la
+      migración `0007`.
 - [x] Datos semilla + deploy público — backend en Railway, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
 - [x] README completo con instrucciones de instalación.
 

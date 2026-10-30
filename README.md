@@ -11,7 +11,7 @@
 
 **Status: deployed.** Backend and frontend are implemented, security
 tests have been executed end-to-end against a live Supabase instance
-(including an independent audit round on the RLS policy layer), and
+(including an adversarial review round on the RLS policy layer), and
 the app is live with seed data — see "Live demo" below.
 
 ## What this is
@@ -35,6 +35,10 @@ application-level locking.
 
 ## Architecture
 
+The full design (request paths, data model, policies, deployment, known limitations)
+is in [ARCHITECTURE.md](ARCHITECTURE.md). The behaviour of each API feature is in
+[specs/](specs/), and [AGENTS.md](AGENTS.md) has the rules for AI coding agents.
+
 ```
 apps/
 ├── api/                                     # NestJS backend
@@ -50,7 +54,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
 │   │       └── supabase/supabase.client.ts  # Shared service-role client
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0010, applied in order (see below)
+│   │   ├── migrations/                      # 0001-0011, applied in order (see below)
 │   │   └── tests/                           # pgTAP suite over the RLS surface
 │   └── bruno/                               # HTTP test collection and local fixtures script (see Testing)
 └── web/                                      # React + Vite dashboard
@@ -118,15 +122,21 @@ the owned-tenant cap, `0008` adds `public.ping()`, the no-op
 function backing `GET /v1/health` (see the API table below and
 `.github/workflows/keep-alive.yml`), `0009` makes a booking point to a
 resource of its own tenant (it aborts if existing bookings already break
-that rule), and `0010` limits what an owner can change on a booking with
-a user JWT:
+that rule), `0010` limits what an owner can change on a booking with
+a user JWT, and `0011` restricts who can execute the public functions:
 
 ```bash
-psql "<your-supabase-connection-string>" \
-  --single-transaction --variable ON_ERROR_STOP=1 \
-  -f apps/api/supabase/migrations/0001_init.sql
-# repeat for 0002 through 0010, in order
+cd apps/api
+supabase link --project-ref <your-project-ref>
+supabase migration list   # Local lists 0001-0011, Remote is empty on a new project
+supabase db push          # applies the missing ones in order and records them
 ```
+
+Run these from `apps/api`: the root `supabase/` folder has no migrations. If
+you applied some by hand with `psql` instead, `db push` would try to apply
+them again; first record them with
+`supabase migration repair --status applied <versions>` and check that
+`migration list` shows both columns filled.
 
 ```bash
 npm run dev:api    # NestJS on :3000
@@ -168,7 +178,8 @@ local Supabase stack, never against the demo project.
   RLS. `002` covers the rule that a booking uses a resource of its own
   tenant, with a user JWT and as the service role, including that the
   rejection is the same whether the time slot is busy or free. `003`
-  covers what an owner may change on a booking with a user JWT.
+  covers what an owner may change on a booking with a user JWT. `004`
+  covers who can execute each public function.
 - **Bruno** (`apps/api/bruno/`) — HTTP tests against the running API and
   against PostgREST, with no mocks:
   - **`setup/`** — signs in directly against Supabase Auth's password
@@ -186,7 +197,10 @@ local Supabase stack, never against the demo project.
     (`04`) confirming the empty result means isolation, not a broken
     endpoint; `05`/`05b` prove that a booking on a resource of another
     tenant and a booking on a resource that does not exist get the
-    same 404.
+    same 404; `06`–`06f` prove that `anon` and a signed-in user cannot call
+    `find_user_id_by_email` or `ping`, while the functions the policies need
+    still work; `07` proves a malformed tenant header is a 401; `08`/`08b`
+    prove a booking that ends at or before its start is a 400.
   - **`booking-cancel/`** — the cancellation lifecycle through the API:
     a confirmed booking is cancelled, cancelling it again is a 409,
     cancelling a booking that does not exist or one of another tenant
@@ -302,7 +316,7 @@ can be repeated. Stop the stack with `supabase stop` when you are done.
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
 **Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
 
-Two seeded tenants (Aurora Studio, Riverside Clinic) with demo
+Two tenants (Aurora Studio, Willow Creek Clinic) with demo
 accounts across all three roles, so cross-tenant isolation and
 role-based access are visible without creating data first:
 
@@ -331,7 +345,7 @@ Build it from the repository root: `docker build -f apps/api/Dockerfile .`
 | Cost with little traffic | The container is billed while it runs, which is all the time unless sleeping is enabled | Scales to zero; idle time is not billed |
 | Cold start | None by default: the instance stays up | The first request after idle waits for an instance to start, unless a minimum instance count is kept |
 | Authentication | Public URL; access control is left to the app (here, the Supabase JWT guards) | Public, or restricted to IAM-authenticated callers by the platform itself |
-| How the Node version is pinned | Nixpacks derives it from `engines` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
+| How the Node version is pinned | Railpack reads `.node-version` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
 | Who builds the image | Railway, from the repository, on every deploy | You or your CI (or Cloud Build), pushing to a registry |
 
 This repository runs its backend on Railway (see "Live demo"), where it
@@ -341,6 +355,13 @@ repository instead of leaving it to the builder.
 **Image contract:** listens on `PORT` (3000 if unset) on `0.0.0.0`, keeps
 no local state (all data is in Supabase), logs to stdout/stderr, and shuts
 down cleanly on `SIGTERM` — any host that honours those can run it.
+
+## How changes are made
+
+A change starts as a written spec in `specs/`. It is implemented on a branch
+and arrives as a pull request. The required `ci` check must pass, then a
+person reviews the diff against the spec before it is merged. `main` is
+protected, and merging deploys.
 
 ## Status
 
@@ -357,7 +378,7 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
       enforcement denied for disallowed actions, and the
       no-overlap exclusion constraint proven race-safe under two
       truly concurrent requests.
-- [x] Independent security audit on the RLS policy layer (self-serve
+- [x] Adversarial security review on the RLS policy layer (self-serve
       tenant/member creation, owner-created resources, owned-tenant
       cap) — one finding fixed (an enumeration oracle in a
       `SECURITY DEFINER` helper, closed by binding it to the
@@ -369,7 +390,10 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
       (does not cross tenant boundaries — see inline comments on
       migration `0007` for both).
 
-      **Security Audit:** Independent RLS policy and isolation review conducted via AI-assisted adversarial analysis (using Anthropic's Claude), designed, directed, and verified by André Chacón. The comprehensive audit trail and vulnerability mapping are maintained as internal governance artifacts.
+      **How this review was done:** an AI-assisted adversarial review of the
+      RLS policy layer, designed, directed and verified by the author (not a
+      third-party audit). Each finding is covered by the pgTAP tests in
+      `apps/api/supabase/tests/database/` and the comments in migration `0007`.
 - [x] Seed data + public deploy — backend on Railway, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.
