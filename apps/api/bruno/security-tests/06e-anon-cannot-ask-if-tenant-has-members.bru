@@ -1,0 +1,39 @@
+meta {
+  name: 06e - The public key alone cannot ask whether a tenant has members
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/tenant_has_members
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "check_tenant_id": "{{tenantAId}}"
+  }
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("anon gets permission denied", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.body.code).to.equal("42501");
+  });
+}
+
+docs {
+  tenant_has_members is called by an RLS policy, which runs as the signed-in
+  caller, so signed-in users keep it (see 06f). Anonymous callers have no use
+  for it.
+}

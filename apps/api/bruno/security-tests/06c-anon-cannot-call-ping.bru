@@ -1,0 +1,35 @@
+meta {
+  name: 06c - The public key alone cannot call ping
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/ping
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {}
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("anon gets permission denied", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.body.code).to.equal("42501");
+  });
+}
+
+docs {
+  ping() backs GET /v1/health and is for the API's service role only.
+}

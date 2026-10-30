@@ -26,6 +26,12 @@ interface PostgrestLikeError {
 // raised by unrelated inserts, whose 409 must not change.
 const RESOURCE_TENANT_FK = 'bookings_resource_same_tenant_fk';
 
+// A booking whose end is not after its start is refused by this check
+// constraint. The caller sent a bad range, so it is a 400. Matched by
+// constraint name because 23514 is raised by every check constraint, and
+// only this one is the caller's mistake.
+const TIME_RANGE_CHECK = 'valid_range';
+
 const POSTGRES_CONFLICT_CODES = new Set([
   '23505', // unique_violation
   '23503', // foreign_key_violation
@@ -58,6 +64,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: HttpStatus.NOT_FOUND,
         message: 'The requested resource was not found.',
         code: 'RESOURCE_NOT_FOUND',
+      });
+      return;
+    }
+
+    if (
+      pgError?.code === '23514' &&
+      pgError.message?.includes(`"${TIME_RANGE_CHECK}"`)
+    ) {
+      reply.status(HttpStatus.BAD_REQUEST).send({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'The end of a booking must be after its start.',
+        code: 'INVALID_TIME_RANGE',
       });
       return;
     }

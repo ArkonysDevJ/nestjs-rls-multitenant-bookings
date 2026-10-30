@@ -130,7 +130,7 @@ Cuatro tipos de pruebas, cada una enfocada en algo concreto. Todas corren contra
   - **`booking-cancel/`** — el ciclo de cancelación a través de la API: una reserva confirmada se cancela, cancelarla otra vez es un 409, cancelar una reserva que no existe o una de otro tenant da el mismo 404, y un id mal formado da 400.
 - **`tests/03-concurrent-overlap-race.sh`** — un shell script, no una petición de Bruno, porque probar que el exclusion constraint de no-overlap es race-safe requiere dos peticiones genuinamente simultáneas, algo que un cliente REST gráfico no puede garantizar; dos llamadas `curl` en background sí.
 
-El workflow de CI (`.github/workflows/ci.yml`) corre Jest, pgTAP y Bruno en cada push y pull request. El script de carrera se corre a mano.
+El workflow de CI (`.github/workflows/ci.yml`) compila la API, la web y la imagen del contenedor, y corre Jest, pgTAP y Bruno, en cada push y pull request. El script de carrera se corre a mano.
 
 ### Ejecutar las pruebas
 

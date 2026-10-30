@@ -1,0 +1,39 @@
+meta {
+  name: 06f - A signed-in user can still call the function their policies use
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/tenant_has_members
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{staffAToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "check_tenant_id": "{{tenantAId}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("a user JWT is still allowed to execute it", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.body).to.be.a("boolean");
+  });
+}
+
+docs {
+  Control for 06e: revoking the function from anon must not take it away from
+  the role whose RLS policies evaluate it.
+}

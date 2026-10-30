@@ -1,0 +1,45 @@
+meta {
+  name: 08 - A booking that ends before it starts is refused with 400
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "{{resourceAId}}",
+    "startsAt": "2037-03-01T11:00:00.000Z",
+    "endsAt": "2037-03-01T10:00:00.000Z"
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("answers 400 with a clear message, not 500", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.body).to.deep.equal({
+      statusCode: 400,
+      message: "The end of a booking must be after its start.",
+      code: "INVALID_TIME_RANGE",
+    });
+  });
+}
+
+docs {
+  The database refuses the row with its valid_range check; the API turns that
+  into a 400 instead of an internal error.
+}

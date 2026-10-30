@@ -1,0 +1,39 @@
+meta {
+  name: 06b - A signed-in user cannot look up a user by email
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/find_user_id_by_email
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{staffAToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "lookup_email": "{{ownerAEmail}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("a user JWT gets permission denied, not a user id", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.code).to.equal("42501");
+  });
+}
+
+docs {
+  Same function as 06, called with a valid user JWT. Only the service role
+  may execute it.
+}
