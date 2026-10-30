@@ -120,6 +120,50 @@ describe('AllExceptionsFilter', () => {
     });
   });
 
+  describe('booking time range', () => {
+    // PostgREST reports the violated constraint inside `message`.
+    const RANGE_MESSAGE =
+      'new row for relation "bookings" violates check constraint "valid_range"';
+
+    it('maps the valid_range check violation to a 400', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch({ code: '23514', message: RANGE_MESSAGE }, host);
+
+      expect(reply.status).toHaveBeenCalledWith(400);
+      expect(reply.send).toHaveBeenCalledWith({
+        statusCode: 400,
+        message: 'The end of a booking must be after its start.',
+        code: 'INVALID_TIME_RANGE',
+      });
+    });
+
+    it('does not echo the constraint name to the client', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch({ code: '23514', message: RANGE_MESSAGE }, host);
+
+      expect(JSON.stringify(reply.send.mock.calls[0][0])).not.toContain(
+        'valid_range',
+      );
+    });
+
+    it('keeps 500 for a check violation on any other constraint', () => {
+      const { host, reply } = makeHost();
+
+      filter.catch(
+        {
+          code: '23514',
+          message:
+            'new row for relation "members" violates check constraint "members_role_check"',
+        },
+        host,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(500);
+    });
+  });
+
   it('maps the exclusion violation 23P01 to a 409 about overlapping bookings', () => {
     const { host, reply } = makeHost();
 

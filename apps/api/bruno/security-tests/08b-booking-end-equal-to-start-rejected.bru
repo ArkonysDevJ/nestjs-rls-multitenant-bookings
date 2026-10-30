@@ -1,0 +1,36 @@
+meta {
+  name: 08b - A booking that ends when it starts is refused with 400
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resourceId": "{{resourceAId}}",
+    "startsAt": "2037-03-02T10:00:00.000Z",
+    "endsAt": "2037-03-02T10:00:00.000Z"
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("an empty range is refused the same way", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.body.code).to.equal("INVALID_TIME_RANGE");
+  });
+}
