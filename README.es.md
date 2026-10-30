@@ -6,7 +6,7 @@
 
 ![Vista de reservas — permite seleccionar un tenant activo, crear recursos con capacidades y gestionar nuevas reservas](docs/assets/bookings.png)
 
-**Estado: desplegado.** El backend y el frontend están implementados, los tests de seguridad se ejecutaron de punta a punta contra una instancia real de Supabase (incluyendo una ronda de auditoría independiente sobre la capa de políticas RLS), y la app está en vivo con datos semilla — ver "Demo en vivo" abajo.
+**Estado: desplegado.** El backend y el frontend están implementados, los tests de seguridad se ejecutaron de punta a punta contra una instancia real de Supabase (incluyendo una ronda de revisión adversarial sobre la capa de políticas RLS), y la app está en vivo con datos semilla — ver "Demo en vivo" abajo.
 
 ## Qué es esto
 
@@ -226,14 +226,25 @@ Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya est�
 
 **Contrato de la imagen:** escucha en `PORT` (3000 si no está definido) en `0.0.0.0`, no guarda estado local (todos los datos están en Supabase), escribe los logs en stdout/stderr y se cierra de forma ordenada con `SIGTERM`; cualquier host que cumpla eso puede ejecutarla.
 
+## Cómo se hacen los cambios
+
+Un cambio empieza como una spec escrita en `specs/`. Se implementa en una rama
+y llega como pull request. El check `ci` es obligatorio y debe pasar; luego una
+persona revisa el diff contra la spec antes de fusionarlo. `main` está
+protegida y fusionar despliega.
+
 ## Estado
 
 - [x] Backend: módulos tenants/members/resources/bookings, guards, migraciones RLS, exclusion constraint de no-overlap.
 - [x] Frontend: auth, selector de tenant, vistas de recursos + reservas, acciones restringidas por rol.
 - [x] Tests de seguridad ejecutados contra una instancia real de Supabase (`apps/api/bruno`) — esta es la afirmación central del proyecto y ya está verificada de punta a punta: peticiones sin autenticación/con token inválido rechazadas, acceso cross-tenant rechazado tanto en la capa de aplicación COMO independientemente vía queries directas a PostgREST contra RLS (evitando el backend por completo), aplicación de rol rechazada para acciones no permitidas, y el exclusion constraint de no-overlap probado race-safe bajo dos peticiones genuinamente concurrentes.
-- [x] Auditoría de seguridad independiente sobre la capa de políticas RLS (creación de tenant/member por autoservicio, recursos creados por el owner, límite de tenants propios) — un hallazgo corregido (un oráculo de enumeración en un helper `SECURITY DEFINER`, cerrado vinculándolo al JWT del propio solicitante en vez de a un parámetro externo), dos hallazgos aceptados como trade-offs deliberados y documentados, no bugs: un oráculo estrecho de existencia necesario para arrancar un tenant nuevo, y una race condition conocida en el límite de tenants propios bajo peticiones concurrentes del mismo usuario (no cruza límites de tenant — ver comentarios inline en la migración `0007` para ambos).
+- [x] Revisión de seguridad adversarial sobre la capa de políticas RLS (creación de tenant/member por autoservicio, recursos creados por el owner, límite de tenants propios) — un hallazgo corregido (un oráculo de enumeración en un helper `SECURITY DEFINER`, cerrado vinculándolo al JWT del propio solicitante en vez de a un parámetro externo), dos hallazgos aceptados como trade-offs deliberados y documentados, no bugs: un oráculo estrecho de existencia necesario para arrancar un tenant nuevo, y una race condition conocida en el límite de tenants propios bajo peticiones concurrentes del mismo usuario (no cruza límites de tenant — ver comentarios inline en la migración `0007` para ambos).
 
-      **Auditoría de Seguridad:** Revisión técnica de seguridad y políticas RLS realizada mediante análisis adversarial asistido por Inteligencia Artificial (utilizando Claude de Anthropic), diseñada, dirigida y verificada por André Chacón. El informe exhaustivo de hallazgos se custodia como artefacto interno de gobernanza.
+      **Cómo se hizo esta revisión:** una revisión adversarial de la capa de
+      políticas RLS asistida por IA, diseñada, dirigida y verificada por el autor
+      (no es una auditoría de terceros). Cada hallazgo está cubierto por los tests
+      pgTAP de `apps/api/supabase/tests/database/` y por los comentarios de la
+      migración `0007`.
 - [x] Datos semilla + deploy público — backend en Railway, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
 - [x] README completo con instrucciones de instalación.
 

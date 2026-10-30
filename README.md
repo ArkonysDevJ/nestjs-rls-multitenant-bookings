@@ -11,7 +11,7 @@
 
 **Status: deployed.** Backend and frontend are implemented, security
 tests have been executed end-to-end against a live Supabase instance
-(including an independent audit round on the RLS policy layer), and
+(including an adversarial review round on the RLS policy layer), and
 the app is live with seed data — see "Live demo" below.
 
 ## What this is
@@ -356,6 +356,13 @@ repository instead of leaving it to the builder.
 no local state (all data is in Supabase), logs to stdout/stderr, and shuts
 down cleanly on `SIGTERM` — any host that honours those can run it.
 
+## How changes are made
+
+A change starts as a written spec in `specs/`. It is implemented on a branch
+and arrives as a pull request. The required `ci` check must pass, then a
+person reviews the diff against the spec before it is merged. `main` is
+protected, and merging deploys.
+
 ## Status
 
 - [x] Backend: tenants/members/resources/bookings modules, guards,
@@ -371,7 +378,7 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
       enforcement denied for disallowed actions, and the
       no-overlap exclusion constraint proven race-safe under two
       truly concurrent requests.
-- [x] Independent security audit on the RLS policy layer (self-serve
+- [x] Adversarial security review on the RLS policy layer (self-serve
       tenant/member creation, owner-created resources, owned-tenant
       cap) — one finding fixed (an enumeration oracle in a
       `SECURITY DEFINER` helper, closed by binding it to the
@@ -383,7 +390,10 @@ down cleanly on `SIGTERM` — any host that honours those can run it.
       (does not cross tenant boundaries — see inline comments on
       migration `0007` for both).
 
-      **Security Audit:** Independent RLS policy and isolation review conducted via AI-assisted adversarial analysis (using Anthropic's Claude), designed, directed, and verified by André Chacón. The comprehensive audit trail and vulnerability mapping are maintained as internal governance artifacts.
+      **How this review was done:** an AI-assisted adversarial review of the
+      RLS policy layer, designed, directed and verified by the author (not a
+      third-party audit). Each finding is covered by the pgTAP tests in
+      `apps/api/supabase/tests/database/` and the comments in migration `0007`.
 - [x] Seed data + public deploy — backend on Railway, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.

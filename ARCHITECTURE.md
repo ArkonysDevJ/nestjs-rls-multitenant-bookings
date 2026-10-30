@@ -245,7 +245,7 @@ cross-tenant leak.
 
 | Behaviour | Verified |
 |---|---|
-| Inserting a row in `members` with a user JWT straight through PostgREST fails with `42P17` (infinite recursion detected in the policy). The API inserts members with the service role, so no route is affected | Run (pgTAP) |
+| Inserting a row in `members` with a user JWT straight through PostgREST fails with `42P17` (infinite recursion detected in the policy). Both routes that insert members (`POST /tenants` and the invitation route) go through the service-role client, which does not evaluate RLS policies | Run (pgTAP); routes by code reading |
 | `tenant_has_members(uuid)` answers, for any tenant id, whether it has members. It is needed to bootstrap a tenant and reveals nothing but existence | Documented in migration `0007` |
 | The owned-tenant cap (5) is checked before the insert, so two simultaneous requests from the same user can pass it | Documented in migration `0007` |
 | `GET /tenants/me` returns an empty list if the tenants query fails, instead of an error | Code reading |
