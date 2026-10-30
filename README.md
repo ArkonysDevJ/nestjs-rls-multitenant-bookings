@@ -196,8 +196,9 @@ local Supabase stack, never against the demo project.
   is race-safe requires two truly simultaneous requests, which a GUI
   REST client can't guarantee; two backgrounded `curl` calls can.
 
-The CI workflow (`.github/workflows/ci.yml`) runs Jest, pgTAP and Bruno
-on every push and pull request. The race script is run by hand.
+The CI workflow (`.github/workflows/ci.yml`) builds the API, the web app and the
+container image, and runs Jest, pgTAP and Bruno, on every push and pull request.
+The race script is run by hand.
 
 ### Running the tests
 
