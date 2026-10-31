@@ -136,7 +136,8 @@ All tables live in the `public` schema, with RLS enabled **and forced**.
 
 **Privileges.** `authenticated` can `select` on the four tables, `insert` on
 `tenants`, `members` and `resources`, and on `bookings` can `insert` and
-`update (status)` only. `service_role` has everything. No table is granted to `anon`.
+`update (status)` only. `service_role` has everything. See "Table privileges"
+below for what `anon` holds.
 
 **Functions** (`security definer`, fixed `search_path`). Supabase grants
 `EXECUTE` on new functions to `anon`, `authenticated` and `service_role`
@@ -152,6 +153,29 @@ migration `0011` revokes them by role and grants back only what is needed:
 
 The two policy functions stay executable by `authenticated` because the
 member-insert policy runs as the caller. `anon` cannot execute any of them.
+
+### Table privileges
+
+Row-level security decides which rows a role can see; table privileges
+decide which statements the role may run at all. This project relies on both.
+
+On the hosted project, `authenticated` holds exactly the privileges granted
+in `supabase/migrations/`, and `anon` holds no data privileges. This matches
+Supabase's current platform default, under which new tables are no longer
+exposed to the Data API implicitly.
+
+The local stack started by the Supabase CLI, which CI also uses, still
+applies the earlier default: `anon` and `authenticated` receive full DML
+privileges on every new table. Tests therefore run against a more permissive
+baseline than the hosted project. RLS isolates rows in both environments, but
+a green local run does not prove that the hosted grants permit the same
+statement.
+
+In both environments, `anon` and `authenticated` also retain `TRUNCATE`,
+`REFERENCES`, `TRIGGER` and `MAINTAIN`. These come from the platform default,
+not from these migrations, and RLS does not govern `TRUNCATE`. Revoking them
+explicitly and aligning the local baseline with the hosted one is tracked as
+a follow-up.
 
 ## 5. Errors
 
