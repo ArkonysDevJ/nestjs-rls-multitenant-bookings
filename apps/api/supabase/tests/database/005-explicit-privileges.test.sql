@@ -21,27 +21,6 @@ begin;
 
 select plan(21);
 
--- ─── Defaults for objects created later (run as the migration role) ─────
-
-create table public.zz_future_table (id int);
-create function public.zz_future_fn() returns int language sql as $$ select 1 $$;
-
-select is(
-  (select count(*) from aclexplode(
-     coalesce(c.relacl, acldefault('r', c.relowner))) a
-   where a.grantee <> c.relowner),
-  0::bigint,
-  'a table created later by postgres in public has no grant for anon, authenticated, service_role or PUBLIC'
-) from pg_class c where c.oid = 'public.zz_future_table'::regclass;
-
-select is(
-  (select count(*) from aclexplode(
-     coalesce(p.proacl, acldefault('f', p.proowner))) a
-   where a.grantee <> p.proowner),
-  0::bigint,
-  'a function created later by postgres in public has no EXECUTE for anon, authenticated, service_role or PUBLIC'
-) from pg_proc p where p.oid = 'public.zz_future_fn()'::regprocedure;
-
 -- ─── Catalog: tables ────────────────────────────────────────────────────
 
 select table_privs_are('public', 'tenants', 'authenticated', array['SELECT'],
@@ -105,6 +84,27 @@ select is(
   || 'tenant_has_members(check_tenant_id uuid) postgres; tenant_has_members(check_tenant_id uuid) service_role',
   'public functions: EXECUTE for postgres and service_role only, none for PUBLIC, anon or authenticated'
 );
+
+-- ─── Defaults for objects created later (run as the migration role) ─────
+
+create table public.zz_future_table (id int);
+create function public.zz_future_fn() returns int language sql as $$ select 1 $$;
+
+select is(
+  (select count(*) from aclexplode(
+     coalesce(c.relacl, acldefault('r', c.relowner))) a
+   where a.grantee <> c.relowner),
+  0::bigint,
+  'a table created later by postgres in public has no grant for anon, authenticated, service_role or PUBLIC'
+) from pg_class c where c.oid = 'public.zz_future_table'::regclass;
+
+select is(
+  (select count(*) from aclexplode(
+     coalesce(p.proacl, acldefault('f', p.proowner))) a
+   where a.grantee <> p.proowner),
+  0::bigint,
+  'a function created later by postgres in public has no EXECUTE for anon, authenticated, service_role or PUBLIC'
+) from pg_proc p where p.oid = 'public.zz_future_fn()'::regprocedure;
 
 -- ─── Fixtures (as service_role) ─────────────────────────────────────────
 
