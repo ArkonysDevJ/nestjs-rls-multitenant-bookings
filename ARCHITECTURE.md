@@ -41,7 +41,7 @@ apps/
         testing/              recordSupabase helper for service specs (kept out of the build)
     supabase/
       config.toml             local stack configuration
-      migrations/             0001 ... 0011, applied in order
+      migrations/             0001 ... 0012, applied in order
       tests/database/         pgTAP: 000 setup hook, 001-003
     bruno/                    HTTP collection, setup-local.sh, race scripts, environments/
     Dockerfile                two-stage image on node:24.22.1-slim
@@ -77,9 +77,10 @@ There are two ways to reach the data, and each is protected by different things.
   (`auth.getUser`), looks up the caller's membership in that tenant, checks the
   role, and queries Postgres with the service-role key. RLS is **not** in play
   on this route, so every query filters by `tenant_id` itself.
-- **Directly with a user JWT.** A client can call PostgREST itself. Then RLS
-  policies, column privileges, constraints and foreign keys are the only
-  barriers.
+- **Directly with a user JWT.** A client can call PostgREST itself. Then table
+  and column privileges, RLS policies, constraints and foreign keys are the
+  only barriers. This route can read, create resources and bookings, and
+  cancel a booking. It cannot create tenants or members.
 
 Some rules are enforced by Postgres for every writer, the service role
 included, so they hold on both routes:
@@ -88,6 +89,7 @@ included, so they hold on both routes:
 |---|---|---|
 | Other tenants' rows are not readable | `TenantGuard` + `tenant_id` filter in every query | RLS select policies |
 | Roles per action | `RolesGuard` (`@Roles`) | RLS insert/update policies |
+| Creating a tenant or a member | `AuthGuard` for a tenant; `TenantGuard` + `RolesGuard` (`owner`) for a member; the cap of 5 owned tenants in `TenantsService`. The write uses the service role | Not possible: `authenticated` has no `insert` privilege on `tenants` or `members` (`42501`, "permission denied for table") |
 | A booking uses a resource of its own tenant | Composite foreign key `bookings_resource_same_tenant_fk`; the API answers 404, identical for a resource of another tenant and for one that does not exist | The same foreign key (`23503`, the same for a busy and a free time slot) |
 | No two confirmed bookings overlap on a resource | Exclusion constraint `no_overlapping_bookings`, led by `tenant_id`; 409 | The same constraint |
 | An owner can only cancel a booking | Only `PATCH /bookings/:id/cancel` exists | `UPDATE` is granted on `bookings.status` only; the owner policy allows `confirmed -> cancelled`; cancelled is terminal |
@@ -120,14 +122,12 @@ All tables live in the `public` schema, with RLS enabled **and forced**.
 | `resources` | `id`, `tenant_id`, `name`, `capacity`, `active` | `unique (id, tenant_id)` (target of the booking key) |
 | `bookings` | `id`, `tenant_id`, `resource_id`, `created_by`, `starts_at`, `ends_at`, `status`, `created_at` | `bookings_resource_same_tenant_fk (resource_id, tenant_id) -> resources (id, tenant_id)`; `no_overlapping_bookings` exclusion over `(tenant_id, resource_id, tstzrange(starts_at, ends_at))` where status is `confirmed`; `valid_range` (`ends_at > starts_at`); status in `confirmed`, `cancelled` |
 
-**Policies** (all use `(select auth.uid())` so the planner evaluates it once):
+**Policies** (seven, all `to authenticated`; they use `(select auth.uid())` so the planner evaluates it once). `tenants` and `members` have no insert policy because nobody but the service role inserts into them:
 
 | Table | Policy | Operation | Allows |
 |---|---|---|---|
 | `members` | `members_see_own_membership` | select | own membership rows |
-| `members` | `bootstrap_owner_or_owner_invites_member` | insert | the first owner of a tenant with no members (and fewer than 5 owned tenants), or an owner adding a `staff`/`viewer` |
 | `tenants` | `members_see_own_tenants` | select | tenants the caller belongs to |
-| `tenants` | `authenticated_can_create_tenants` | insert | any authenticated user |
 | `resources` | `tenant_isolation_resources` | select | resources of the caller's tenants |
 | `resources` | `owner_can_create_resources` | insert | owners, for their tenant |
 | `bookings` | `tenant_isolation_bookings_select` | select | bookings of the caller's tenants |
@@ -135,47 +135,66 @@ All tables live in the `public` schema, with RLS enabled **and forced**.
 | `bookings` | `owner_can_cancel_bookings` | update | owners: a confirmed booking of their tenant becomes cancelled |
 
 **Privileges.** `authenticated` can `select` on the four tables, `insert` on
-`tenants`, `members` and `resources`, and on `bookings` can `insert` and
-`update (status)` only. `service_role` has everything. See "Table privileges"
-below for what `anon` holds.
+`resources` and `bookings`, and on `bookings` can `update (status)` only.
+`service_role` has everything. `anon` has nothing. See "Table privileges"
+below.
 
-**Functions** (`security definer`, fixed `search_path`). Supabase grants
-`EXECUTE` on new functions to `anon`, `authenticated` and `service_role`
-explicitly, and `revoke ... from public` does not remove those grants, so
-migration `0011` revokes them by role and grants back only what is needed:
+**Functions** (`security definer`, fixed `search_path`). Only `postgres` and
+`service_role` can execute them; `PUBLIC`, `anon` and `authenticated` cannot:
 
-| Function | Used by | Who can execute | Purpose |
-|---|---|---|---|
-| `tenant_has_members(uuid)` | the member-insert policy | `authenticated`, `service_role` | tells whether a tenant is still unclaimed, without being filtered by the caller's own visibility |
-| `owned_tenant_count()` | the member-insert policy | `authenticated`, `service_role` | counts the caller's owned tenants (no parameter, so it cannot be asked about someone else) |
-| `find_user_id_by_email(text)` | the API | `service_role` only | resolves an invitee by email; open to other roles it would let anyone test which emails are registered |
-| `ping()` | the API | `service_role` only | backs `GET /v1/health` without touching a business table |
+| Function | Used by | Purpose |
+|---|---|---|
+| `tenant_has_members(uuid)` | nothing | left over from the removed sign-up policies; kept, with its privileges restricted, because dropping a function is a separate decision |
+| `owned_tenant_count()` | nothing | same |
+| `find_user_id_by_email(text)` | the API | resolves an invitee by email; open to other roles it would let anyone test which emails are registered |
+| `ping()` | the API | backs `GET /v1/health` without touching a business table |
 
-The two policy functions stay executable by `authenticated` because the
-member-insert policy runs as the caller. `anon` cannot execute any of them.
+The header of migration `0011` says that Supabase grants `EXECUTE` on every new
+function to `anon`, `authenticated` and `service_role`. That is true of the
+local stack only. Migration `0012` restricts the two policy functions too.
 
 ### Table privileges
 
 Row-level security decides which rows a role can see; table privileges
 decide which statements the role may run at all. This project relies on both.
 
-On the hosted project, `authenticated` holds exactly the privileges granted
-in `supabase/migrations/`, and `anon` holds no data privileges. This matches
-Supabase's current platform default, under which new tables are no longer
-exposed to the Data API implicitly.
+Since migration `0012` the privileges are set by the migrations and are the
+same on the local stack, in CI and on the hosted project, for every table,
+column and function the migrations create:
 
-The local stack started by the Supabase CLI, which CI also uses, still
-applies the earlier default: `anon` and `authenticated` receive full DML
-privileges on every new table. Tests therefore run against a more permissive
-baseline than the hosted project. RLS isolates rows in both environments, but
-a green local run does not prove that the hosted grants permit the same
-statement.
+- `authenticated`: `select` on the four tables, `insert` on `resources` and
+  `bookings`, `update (status)` on `bookings`. Nothing else, including no
+  `TRUNCATE`, `REFERENCES`, `TRIGGER` or `MAINTAIN`.
+- `anon`: nothing.
+- `service_role`: everything on the four tables, granted explicitly in `0001`.
+  The hosted project does not grant `service_role` anything on a new table by
+  itself, so this grant is what keeps the API working.
+- Functions: see above.
 
-In both environments, `anon` and `authenticated` also retain `TRUNCATE`,
-`REFERENCES`, `TRIGGER` and `MAINTAIN`. These come from the platform default,
-not from these migrations, and RLS does not govern `TRUNCATE`. Revoking them
-explicitly and aligning the local baseline with the hosted one is tracked as
-a follow-up.
+**Defaults for later objects.** Migration `0012` removes the default grants that
+`postgres` would give to `anon`, `authenticated` and `service_role` on tables,
+sequences and functions it creates in `public`, so an object without an explicit
+grant fails the same way everywhere. It also removes the default `EXECUTE` for
+`PUBLIC` on functions `postgres` creates. That second change is global, with no
+`in schema`, because PostgreSQL does not apply a schema-scoped revoke to a global
+default: it covers functions `postgres` creates in any schema. It does not touch
+objects owned by other roles. On the local stack, an extension enabled by
+`postgres` ends up owned by `supabase_admin` (checked with `citext` inside a
+rolled-back transaction), so its functions keep their grants.
+
+**Not covered: objects owned by `supabase_admin`.** `0001` creates `btree_gist`,
+which the local stack installs in `public`: 188 functions, 20 types and 12
+operators owned by `supabase_admin`, executable by `PUBLIC`, `anon` and
+`authenticated`. They belong to an extension and are not reachable by the owner
+role of the migrations, so neither the migration nor pgTAP `005` touches them
+(the test leaves out objects that depend on an extension). Where the extension is
+installed on the hosted project was not checked.
+
+**Convention for new migrations.** Every new table grants explicitly what
+`service_role` and `authenticated` need. Every new function grants `EXECUTE`
+explicitly. On the hosted project nothing is granted implicitly, not even to
+`service_role`, and since `0012` neither is anything on the local stack for
+objects `postgres` creates.
 
 ## 5. Errors
 
@@ -221,8 +240,8 @@ cases), and cancelling one that is not confirmed is a 409.
 | Layer | What it proves | Where |
 |---|---|---|
 | Jest | Guards, the exception filter, and the **intent** of each service: the tenant filter is present with the value it was given, and a write takes its tenant from the context, not the payload. It does not show the database rejecting anything | `apps/api/src/**/*.spec.ts` |
-| pgTAP | What Postgres enforces by itself, for a user JWT and as the service role. `001` tenant isolation by RLS; `002` a booking uses a resource of its own tenant (same error for busy and free slots); `003` what an owner may change on a booking; `004` who can execute each public function (read from the catalog, plus the calls that must still work) | `apps/api/supabase/tests/database/` |
-| Bruno | HTTP behaviour against the running API and PostgREST: auth and role guards, RLS through PostgREST, the cross-tenant 404, the refused calls to the restricted functions (`06`–`06f`), the 401 for a malformed tenant header (`07`), the 400 for a bad time range (`08`, `08b`), the cancellation lifecycle | `apps/api/bruno/` |
+| pgTAP | What Postgres enforces by itself, for a user JWT and as the service role. `001` tenant isolation by RLS; `002` a booking uses a resource of its own tenant (same error for busy and free slots); `003` what an owner may change on a booking; `004` who can execute each public function (read from the catalog); `005` the privileges of every table, column and function, the defaults for later objects, the refusal of direct inserts into `tenants` and `members` (by privilege, not by RLS), a sweep that runs `EXPLAIN` for every granted command as `authenticated` so a policy that cannot be rewritten shows up, and the allowed writes | `apps/api/supabase/tests/database/` |
+| Bruno | HTTP behaviour against the running API and PostgREST: auth and role guards, RLS through PostgREST, the cross-tenant 404, the refused calls to the restricted functions (`06`–`06f`), the 401 for a malformed tenant header (`07`), the 400 for a bad time range (`08`, `08b`), the cancellation lifecycle, and sign-up (`signup`): creating a tenant, inviting a member, the refusals by role and by tenant, the cap of 5 owned tenants, and the refused direct inserts through PostgREST | `apps/api/bruno/` |
 | Race script | Two simultaneous bookings for the same slot: one 201 and one 409 | `apps/api/bruno/tests/` |
 
 All of it runs against a local Supabase stack. `ci.yml` runs Jest, pgTAP and
@@ -236,8 +255,8 @@ tenant filter. The Docker image is built in CI but never run there.
 The local Postgres 17.6 can crash the connection when a role calls a function
 it has no `EXECUTE` on over the simple query protocol (`psql`, pgTAP). The
 same call through PostgREST answers normally. For that reason pgTAP `004`
-reads the privileges from the catalog and the refused calls are covered over
-HTTP by Bruno `06`–`06f`.
+and `005` read the privileges from the catalog and the refused calls are covered
+over HTTP by Bruno `06`–`06f`.
 
 ## 8. Deployment
 
@@ -247,7 +266,7 @@ HTTP by Bruno `06`–`06f`.
 - Branch protection on `main`: pull request required, `ci` must pass.
 - Migrations on the demo database are applied from `apps/api` with
   `supabase db push` after `supabase link`. The history table is aligned
-  with `0001`–`0011` (the first ones were applied by hand with `psql`).
+  with `0001`–`0012` (the first ones were applied by hand with `psql`).
   Run the CLI from `apps/api`: the root `supabase/` folder has no migrations.
 - `apps/api/Dockerfile` builds the API into a two-stage image on
   `node:24.22.1-slim` that runs as the unprivileged `node` user, listens on
@@ -269,8 +288,8 @@ cross-tenant leak.
 
 | Behaviour | Verified |
 |---|---|
-| Inserting a row in `members` with a user JWT straight through PostgREST fails with `42P17` (infinite recursion detected in the policy). Both routes that insert members (`POST /tenants` and the invitation route) go through the service-role client, which does not evaluate RLS policies | Run (pgTAP); routes by code reading |
-| `tenant_has_members(uuid)` answers, for any tenant id, whether it has members. It is needed to bootstrap a tenant and reveals nothing but existence | Documented in migration `0007` |
-| The owned-tenant cap (5) is checked before the insert, so two simultaneous requests from the same user can pass it | Documented in migration `0007` |
+| The owned-tenant cap (5) is read and then followed by the insert, so two simultaneous requests from the same user can pass it. With at most two instances running, this is accepted | Code reading |
+| Creating a tenant is two writes (the tenant, then its owner row) with a compensating delete, not a transaction. If the process dies between them, a tenant with no owner stays behind, visible to nobody. Accepted | Code reading |
+| Objects that an extension puts in `public` and `supabase_admin` owns (`btree_gist`) keep the platform's grants | Run (local stack); hosted project not checked |
 | `GET /tenants/me` returns an empty list if the tenants query fails, instead of an error | Code reading |
 | A booking cannot be rescheduled: the only change allowed after creating it is cancelling it | By design |

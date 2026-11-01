@@ -35,7 +35,7 @@ Docker and the Supabase CLI are needed for the database and HTTP tests.
 | Local Supabase stack | `cd apps/api && supabase start --exclude studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta` |
 | Database tests (pgTAP) | `cd apps/api && supabase test db` |
 | Test users and data for Bruno | `cd apps/api && bash bruno/setup-local.sh` |
-| HTTP tests (Bruno CLI) | `cd apps/api/bruno && bru run setup security-tests booking-cancel --env local-stack` |
+| HTTP tests (Bruno CLI) | `cd apps/api/bruno && bru run setup security-tests booking-cancel signup --env local-stack` |
 | Concurrent overlap race | `cd apps/api && bash bruno/tests/run-race.sh` |
 | Stop the stack | `cd apps/api && supabase stop` |
 
@@ -73,19 +73,23 @@ every test passes.
 ## Migrations
 
 - Add a **new** file in `apps/api/supabase/migrations/`, numbered after the
-  last one (`0012_...`). Never edit an existing migration: they are applied to
+  last one (`0013_...`). Never edit an existing migration: they are applied to
   a deployed database. Never change the IDs in `0002_seed.sql`.
 - Wrap the file in `begin; ... commit;`, make it safe to run twice
   (`if exists`, `create or replace`), and look up constraint names in the
   catalog instead of assuming them.
-- A new function must say who can execute it. Supabase grants `EXECUTE` to
-  `anon`, `authenticated` and `service_role` by default and
-  `revoke ... from public` does not remove those: revoke by role, then grant
-  back only what is needed (see `0011_restrict_function_execute.sql`).
+- Grant explicitly. A new table grants what `service_role` and `authenticated`
+  need, and a new function grants `EXECUTE` to the roles that need it. Nothing
+  is granted implicitly on the hosted project, not even to `service_role`, and
+  since `0012` objects that `postgres` creates get no default grants on the
+  local stack either (see `0012_explicit_privileges.sql`).
+- Tenants and members are created only through the API (service role). Do not
+  add a policy or a grant that lets `authenticated` insert into `tenants` or
+  `members`.
 - If existing data could break the new rule, abort first with a clear message
   (see `0009_booking_resource_same_tenant.sql`).
 - Every new or changed policy, grant, constraint or function needs a pgTAP test
-  in `apps/api/supabase/tests/database/` (next file: `005-...`). Write the test
+  in `apps/api/supabase/tests/database/` (next file: `006-...`). Write the test
   first and confirm it fails for the expected reason. Cover the user-JWT
   path and, when relevant, `service_role`.
 

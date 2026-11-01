@@ -54,7 +54,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Maps Postgres error codes to HTTP
 │   │       └── supabase/supabase.client.ts  # Shared service-role client
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0011, applied in order (see below)
+│   │   ├── migrations/                      # 0001-0012, applied in order (see below)
 │   │   └── tests/                           # pgTAP suite over the RLS surface
 │   └── bruno/                               # HTTP test collection and local fixtures script (see Testing)
 └── web/                                      # React + Vite dashboard
@@ -77,9 +77,10 @@ depends on the route the request takes:
   every service query; RLS does not apply, so a missing filter would be
   a direct cross-tenant leak.
 - **Directly with a user JWT.** A client that queries Supabase's
-  PostgREST API itself is subject to the RLS policies in Postgres and to
-  the column privileges of the `authenticated` role. Those are the
-  barriers on that route.
+  PostgREST API itself is subject to the table and column privileges of the
+  `authenticated` role and to the RLS policies in Postgres. Those are the
+  barriers on that route. It can read, create resources and bookings, and
+  cancel a booking; it cannot create tenants or members.
 
 Some rules are enforced by Postgres for every writer, the service role
 included, so they hold on both routes. This is what protects each rule:
@@ -88,6 +89,7 @@ included, so they hold on both routes. This is what protects each rule:
 |---|---|---|
 | Rows of other tenants are not readable | `TenantGuard` + `tenant_id` filter in every query | RLS select policies |
 | Roles per action | `RolesGuard` | RLS insert/update policies |
+| Creating a tenant or a member | `AuthGuard` (tenant); `TenantGuard` + `RolesGuard` with `owner` (member); the cap of 5 owned tenants in the service. The write uses the service role | Not possible: `authenticated` has no `insert` privilege on `tenants` or `members` |
 | A booking uses a resource of its own tenant | Composite foreign key `bookings_resource_same_tenant_fk`. The API answers 404, the same for a resource of another tenant and for one that does not exist | The same foreign key (`23503`, also the same for a busy and a free time slot) |
 | No two confirmed bookings overlap on a resource | Exclusion constraint `no_overlapping_bookings` (led by `tenant_id`); 409 | The same constraint |
 | An owner can only cancel a booking | Only `PATCH /bookings/:id/cancel` exists; it cancels a confirmed booking and nothing else | `UPDATE` is granted on `bookings.status` only, and the owner policy allows confirmed → cancelled; cancelled is terminal |
@@ -123,12 +125,15 @@ function backing `GET /v1/health` (see the API table below and
 `.github/workflows/keep-alive.yml`), `0009` makes a booking point to a
 resource of its own tenant (it aborts if existing bookings already break
 that rule), `0010` limits what an owner can change on a booking with
-a user JWT, and `0011` restricts who can execute the public functions:
+a user JWT, `0011` restricts who can execute the public functions, and
+`0012` fixes every table, column and function privilege in the migrations
+instead of relying on each environment's default, and removes the direct
+sign-up policies: tenants and members are created only through the API:
 
 ```bash
 cd apps/api
 supabase link --project-ref <your-project-ref>
-supabase migration list   # Local lists 0001-0011, Remote is empty on a new project
+supabase migration list   # Local lists 0001-0012, Remote is empty on a new project
 supabase db push          # applies the missing ones in order and records them
 ```
 
@@ -179,7 +184,10 @@ local Supabase stack, never against the demo project.
   tenant, with a user JWT and as the service role, including that the
   rejection is the same whether the time slot is busy or free. `003`
   covers what an owner may change on a booking with a user JWT. `004`
-  covers who can execute each public function.
+  covers who can execute each public function. `005` covers the privileges
+  of every table, column and function, the defaults for objects created
+  later, that a direct insert into `tenants` or `members` is refused by
+  privilege, and that every granted command still passes policy rewriting.
 - **Bruno** (`apps/api/bruno/`) — HTTP tests against the running API and
   against PostgREST, with no mocks:
   - **`setup/`** — signs in directly against Supabase Auth's password
@@ -198,9 +206,15 @@ local Supabase stack, never against the demo project.
     endpoint; `05`/`05b` prove that a booking on a resource of another
     tenant and a booking on a resource that does not exist get the
     same 404; `06`–`06f` prove that `anon` and a signed-in user cannot call
-    `find_user_id_by_email` or `ping`, while the functions the policies need
-    still work; `07` proves a malformed tenant header is a 401; `08`/`08b`
+    `find_user_id_by_email`, `ping` or the two functions the removed sign-up
+    policies used; `07` proves a malformed tenant header is a 401; `08`/`08b`
     prove a booking that ends at or before its start is a 400.
+  - **`signup/`** — creating a tenant and inviting a member through the API;
+    the refusals for staff, viewers and owners of another tenant, with the
+    same 401 for a tenant that does not exist; the cap of five owned tenants
+    (a user who is staff in five tenants can still create their own); and
+    the direct inserts into `tenants` and `members` through PostgREST,
+    refused with `42501` "permission denied for table".
   - **`booking-cancel/`** — the cancellation lifecycle through the API:
     a confirmed booking is cancelled, cancelling it again is a 409,
     cancelling a booking that does not exist or one of another tenant
@@ -290,17 +304,21 @@ can be repeated. Stop the stack with `supabase stop` when you are done.
   constraint (`EXCLUDE USING gist`), proven under two genuinely
   simultaneous requests rather than assumed from application-level
   locking.
-- Self-service multi-tenant bootstrap (tenant creation, email-based
-  member invites, owner-gated resource creation) built entirely on
-  `SECURITY DEFINER` helper functions and RLS policies — including a
+- Self-service multi-tenant sign-up (tenant creation, email-based
+  member invites, owner-gated resource creation). It was first built on
+  `SECURITY DEFINER` helper functions and RLS policies, including a
   real bug caught and fixed during development: an early version of a
   helper function was callable with an arbitrary user id, making it a
   metadata-enumeration oracle; fixed by binding it to the caller's own
-  JWT instead of a passed-in parameter (see migration `0007`).
-  Deliberate, documented trade-offs (a narrow existence-check oracle
-  needed for bootstrap, and a known same-user race on an anti-abuse
-  cap) are called out explicitly as accepted design decisions, not
-  silent debt.
+  JWT instead of a passed-in parameter (see migration `0007`). A later
+  review found that the member-insert policy could not be evaluated at all
+  (infinite recursion) and that any signed-in user could insert tenants
+  directly, so migration `0012` moved tenant and member creation to the
+  API alone and made the database refuse those writes by privilege. The
+  authorization of the sign-up now lives in the API code and is tested
+  there. Its accepted trade-offs (a same-user race on the anti-abuse cap, and
+  a non-transactional compensation when the owner row fails) are called out
+  explicitly, not silent debt.
 - Role-based write authorization enforced per action (`owner` /
   `staff` / `viewer`), independent from tenant-membership enforcement,
   with both checks proven independently in the test suite.
@@ -394,6 +412,8 @@ protected, and merging deploys.
       RLS policy layer, designed, directed and verified by the author (not a
       third-party audit). Each finding is covered by the pgTAP tests in
       `apps/api/supabase/tests/database/` and the comments in migration `0007`.
+      The tenant and member policies it reviewed were replaced by API-only
+      creation in migration `0012`.
 - [x] Seed data + public deploy — backend on Railway, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.
