@@ -1,13 +1,19 @@
 // apps/api/src/tenants/tenants.service.ts
 // [F-ID: SRC-TENANTS-SERVICE-01]
-// @version 1.2.0
+// @version 1.3.0
+// @changelog 1.3.0 — Tenant creation and the cap on owned tenants are enforced
+//   here and nowhere else. Migration 0012 removed the tenants and members
+//   INSERT policies and the INSERT privilege of authenticated, so no direct-JWT
+//   path exists any more; this service (service role) is the only way in. The
+//   cap is read-then-insert, so two simultaneous requests can exceed it, and
+//   the compensating delete below is not transactional: both are accepted.
 // @changelog 1.2.0 — createTenant now rejects with 403 once the caller
 //   already owns MAX_OWNED_TENANTS tenants. Anti-abuse for a public demo
 //   with open sign-up + open tenant creation, not a tenant-isolation
 //   security boundary — but enforced the same way as everything else in
 //   this file: app-layer check here, independently re-enforced in RLS
 //   (migration 0006's owned_tenant_count() + updated bootstrap policy)
-//   for the direct-JWT path.
+//   for the direct-JWT path. Superseded by 1.3.0.
 // @changelog 1.1.0 — Added createTenant: inserts the tenant row, then the
 //   caller's own 'owner' membership row, via two sequential service-role
 //   calls (no multi-table transaction available through supabase-js).

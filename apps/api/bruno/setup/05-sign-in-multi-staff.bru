@@ -1,0 +1,37 @@
+meta {
+  name: 05 - Sign in as the user who is staff in five tenants
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{supabaseUrl}}/auth/v1/token?grant_type=password
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{multiStaffEmail}}",
+    "password": "{{multiStaffPassword}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("multiStaffToken", res.body.access_token);
+}
+
+tests {
+  test("received an access token", function () {
+    expect(res.body.access_token).to.be.a("string");
+  });
+}
+
+docs {
+  Same pattern as 01-sign-in-owner. This account is staff in five tenants and owns none, and is used by signup/08.
+}

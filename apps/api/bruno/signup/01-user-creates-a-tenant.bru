@@ -1,0 +1,39 @@
+meta {
+  name: 01 - A signed-in user creates a tenant through the API
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/tenants
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Created through the API"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("the tenant is created and the caller is its owner", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.body.role).to.equal("owner");
+    expect(res.body.id).to.be.a("string");
+  });
+}
+
+docs {
+  Sign-up of a tenant is a service-role write done by the API. With the direct
+  database path closed (signup/09 and 10), this route is the only way in.
+}

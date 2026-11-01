@@ -1,0 +1,40 @@
+meta {
+  name: 10 - Direct insert into tenants with a user JWT is denied by privilege
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/tenants
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{ownerAToken}}
+  Content-Type: application/json
+  Prefer: return=minimal
+}
+
+body:json {
+  {
+    "name": "Direct insert"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("permission denied for table", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.code).to.equal("42501");
+    expect(res.body.message).to.include("permission denied for table tenants");
+  });
+}
+
+docs {
+  Before migration 0012 this insert succeeded and left a tenant with no owner.
+}

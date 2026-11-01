@@ -1,0 +1,37 @@
+meta {
+  name: 04 - Sign in as the user who owns five tenants
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{supabaseUrl}}/auth/v1/token?grant_type=password
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{cappedOwnerEmail}}",
+    "password": "{{cappedOwnerPassword}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("cappedOwnerToken", res.body.access_token);
+}
+
+tests {
+  test("received an access token", function () {
+    expect(res.body.access_token).to.be.a("string");
+  });
+}
+
+docs {
+  Same pattern as 01-sign-in-owner. This account owns five tenants, the cap, and is used by signup/07.
+}

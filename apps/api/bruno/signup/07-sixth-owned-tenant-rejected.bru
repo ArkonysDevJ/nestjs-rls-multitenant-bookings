@@ -1,0 +1,38 @@
+meta {
+  name: 07 - A user who already owns five tenants cannot create a sixth
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/tenants
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cappedOwnerToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "One too many"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("rejected by the cap on owned tenants", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.message).to.include("at most 5");
+  });
+}
+
+docs {
+  The cap is enforced in TenantsService and nowhere else. It counts tenants the
+  caller owns.
+}

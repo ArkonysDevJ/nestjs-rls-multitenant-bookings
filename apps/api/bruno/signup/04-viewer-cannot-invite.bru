@@ -1,0 +1,38 @@
+meta {
+  name: 04 - A viewer cannot invite
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{viewerAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{inviteeEmail}}",
+    "role": "staff"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("rejected by the role check, not by the database", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
+
+docs {
+  Same as 03, with the viewer role.
+}

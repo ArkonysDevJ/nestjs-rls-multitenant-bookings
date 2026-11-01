@@ -1,0 +1,41 @@
+meta {
+  name: 06f - A signed-in user cannot ask whether a tenant has members
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/rpc/tenant_has_members
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{staffAToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "check_tenant_id": "{{tenantAId}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("a user JWT gets permission denied", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.code).to.equal("42501");
+  });
+}
+
+docs {
+  Counterpart of 06e for a signed-in user. No policy calls this function any
+  more (tenants and members are created only through the API), so only the
+  service role may execute it. It used to return 200 here, while an RLS policy
+  evaluated it as the caller.
+}

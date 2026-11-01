@@ -1,0 +1,39 @@
+meta {
+  name: 03 - A staff member cannot invite
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{staffAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{viewerAEmail}}",
+    "role": "viewer"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("rejected by the role check, not by the database", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
+
+docs {
+  RolesGuard stops a valid member of the tenant who is not an owner. The
+  database no longer has an invite policy, so this guard is the only barrier.
+}

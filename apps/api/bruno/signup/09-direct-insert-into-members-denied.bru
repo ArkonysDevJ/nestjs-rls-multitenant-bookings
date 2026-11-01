@@ -1,0 +1,44 @@
+meta {
+  name: 09 - Direct insert into members with a user JWT is denied by privilege
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{supabaseUrl}}/rest/v1/members
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{supabaseAnonKey}}
+  Authorization: Bearer {{ownerAToken}}
+  Content-Type: application/json
+  Prefer: return=minimal
+}
+
+body:json {
+  {
+    "tenant_id": "{{tenantAId}}",
+    "user_id": "{{inviteeId}}",
+    "role": "viewer"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+tests {
+  test("permission denied for table, not an RLS rejection and not a recursion error", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.body.code).to.equal("42501");
+    expect(res.body.message).to.include("permission denied for table members");
+  });
+}
+
+docs {
+  An owner tries to add a member straight through PostgREST. Before migration
+  0012 this ended in 42P17 (infinite recursion in a policy); now the role has no
+  INSERT privilege on the table.
+}

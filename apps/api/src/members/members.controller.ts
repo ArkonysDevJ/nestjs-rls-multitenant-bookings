@@ -1,6 +1,9 @@
 // apps/api/src/members/members.controller.ts
 // [F-ID: SRC-MEMBERS-CONTROLLER-01]
-// @version 1.1.0
+// @version 1.2.0
+// @changelog 1.2.0 — The owner check here (RolesGuard) is now the only barrier
+//   for inviting a member: migration 0012 removed the members INSERT policy and
+//   the INSERT privilege of authenticated, so there is no direct-JWT path.
 // @changelog 1.1.0 — Invite by email (see AddMemberDto 1.1.0 / MembersService 1.2.0).
 // @changelog 1.0.0 — POST /members: an owner invites a staff/viewer into
 //   the active tenant (resolved via TenantGuard from x-tenant-id, same

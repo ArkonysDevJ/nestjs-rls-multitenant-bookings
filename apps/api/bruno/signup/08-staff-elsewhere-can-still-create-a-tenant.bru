@@ -1,0 +1,37 @@
+meta {
+  name: 08 - A user who is staff in five tenants can create their own
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/tenants
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{multiStaffToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Mine"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("the cap counts owned tenants, not memberships", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.body.role).to.equal("owner");
+  });
+}
+
+docs {
+  Counterpart of 07: five staff memberships do not count towards the cap.
+}
