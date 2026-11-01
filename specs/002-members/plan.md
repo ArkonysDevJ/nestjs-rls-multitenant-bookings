@@ -7,7 +7,7 @@
 | Route, guards, role | `apps/api/src/members/members.controller.ts` |
 | Logic and membership lookups | `apps/api/src/members/members.service.ts` |
 | Input validation | `apps/api/src/members/dto/add-member.dto.ts` |
-| Schema, policies, lookup function | `apps/api/supabase/migrations/0001_init.sql`, `0003_self_serve_membership.sql`, `0004_member_lookup_by_email.sql` |
+| Schema, lookup function | `apps/api/supabase/migrations/0001_init.sql`, `0004_member_lookup_by_email.sql`; the insert policy of `0003` was removed by `0012_explicit_privileges.sql` |
 | Web form | `AddMemberForm` in `apps/web/src/App.tsx` |
 
 ## How it works
@@ -27,8 +27,8 @@ backs the tenants feature.
 
 | Rule | API route | Direct user-JWT route |
 |---|---|---|
-| Only an owner invites | `@Roles('owner')` after `TenantGuard` | `bootstrap_owner_or_owner_invites_member` insert policy: an owner may add `staff`/`viewer` to their own tenant |
-| No second owner | DTO only accepts `staff` and `viewer` | Same policy: only the bootstrap branch can insert an `owner` |
+| Only an owner invites | `@Roles('owner')` after `TenantGuard`; the write uses the service role | None: `authenticated` has no `insert` privilege on `members` (`42501`) |
+| No second owner | DTO only accepts `staff` and `viewer`; the only owner row is the one `POST /tenants` writes | Same: no insert is possible |
 | One membership per user and tenant | `unique (tenant_id, user_id)` | Same constraint |
 
 ## Tests
@@ -38,3 +38,5 @@ backs the tenants feature.
 | Jest, intent (tenant from the argument, user from the lookup, nothing inserted without an account) | `apps/api/src/members/members.service.spec.ts` |
 | Jest, guards that use the lookups | `apps/api/src/common/guards/tenant.guard.spec.ts`, `roles.guard.spec.ts` |
 | Bruno, cross-tenant and role denial | `apps/api/bruno/security-tests/01-*.bru`, `02-*.bru` |
+| Bruno, invitation and its refusals (staff, viewer, other tenant, nonexistent tenant) and the refused direct insert | `apps/api/bruno/signup/02` to `06`, `09` |
+| pgTAP, privileges of `members` and the refused direct insert | `apps/api/supabase/tests/database/005-explicit-privileges.test.sql` |

@@ -1,0 +1,41 @@
+meta {
+  name: 02 - An owner invites a member to their tenant
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantAId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{inviteeEmail}}",
+    "role": "staff"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+tests {
+  test("the invitee becomes staff of tenant A", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.body.role).to.equal("staff");
+    expect(res.body.tenantId).to.equal(bru.getEnvVar("tenantAId"));
+  });
+}
+
+docs {
+  The invitation is a service-role write done by the API, after TenantGuard and
+  the owner role check.
+}

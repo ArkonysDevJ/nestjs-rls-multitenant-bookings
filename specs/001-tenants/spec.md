@@ -31,8 +31,8 @@ Body: `{ "name": <string, 1 to 120 characters> }`.
 - **FR-1** Creating a tenant also creates the owner membership for the caller. If
   the membership cannot be created, the new tenant is deleted, so a tenant never
   exists without an owner.
-- **FR-2** A user owns at most 5 tenants. The API checks it, and a policy checks
-  it again for a client using a user JWT.
+- **FR-2** A user owns at most 5 tenants. Only the API creates tenants, so only
+  the API checks it.
 - **FR-3** The list only contains tenants the caller is a member of.
 
 ## Out of scope

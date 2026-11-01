@@ -4,7 +4,9 @@
 # Prepares everything the Bruno collection needs on the LOCAL Supabase stack:
 # three users (owner, staff, viewer) with random passwords, a tenant they
 # belong to, a second tenant they do not belong to, a resource in each, and
-# one confirmed booking in the second tenant. It then writes
+# one confirmed booking in the second tenant. For the sign-up checks it also
+# creates an invitee (an account that belongs to no tenant), a user who owns
+# five tenants, and a user who is staff in five tenants. It then writes
 # bruno/environments/local-stack.bru, which is ignored by Git because it holds
 # the test credentials.
 #
@@ -48,6 +50,10 @@ OWNER_PW="$(random 18)"; STAFF_PW="$(random 18)"; VIEWER_PW="$(random 18)"
 OWNER_EMAIL="owner-a-$RUN_ID@local.test"
 STAFF_EMAIL="staff-a-$RUN_ID@local.test"
 VIEWER_EMAIL="viewer-a-$RUN_ID@local.test"
+INVITEE_PW="$(random 18)"; CAPPED_PW="$(random 18)"; MULTI_PW="$(random 18)"
+INVITEE_EMAIL="invitee-$RUN_ID@local.test"
+CAPPED_EMAIL="capped-owner-$RUN_ID@local.test"
+MULTI_EMAIL="multi-staff-$RUN_ID@local.test"
 
 create_user() { # email password -> user id
   curl -sS --fail-with-body -X POST "$API_URL/auth/v1/admin/users" \
@@ -60,6 +66,9 @@ create_user() { # email password -> user id
 OWNER_ID="$(create_user "$OWNER_EMAIL" "$OWNER_PW")"
 STAFF_ID="$(create_user "$STAFF_EMAIL" "$STAFF_PW")"
 VIEWER_ID="$(create_user "$VIEWER_EMAIL" "$VIEWER_PW")"
+INVITEE_ID="$(create_user "$INVITEE_EMAIL" "$INVITEE_PW")"
+CAPPED_ID="$(create_user "$CAPPED_EMAIL" "$CAPPED_PW")"
+MULTI_ID="$(create_user "$MULTI_EMAIL" "$MULTI_PW")"
 
 # Resources and tenants get random v4 ids: the API validates ids as UUIDs.
 IDS="$(psql_local -F ' ' <<SQL
@@ -80,6 +89,15 @@ SQL
 )"
 read -r TENANT_A TENANT_B RESOURCE_A RESOURCE_B BOOKING_B <<<"$IDS"
 
+# The cap on owned tenants counts memberships with the owner role; being staff
+# elsewhere does not count towards it.
+psql_local <<SQL
+with t as (insert into tenants (name) select 'Capped ' || g || ' $RUN_ID' from generate_series(1, 5) g returning id)
+insert into members (tenant_id, user_id, role) select id, '$CAPPED_ID'::uuid, 'owner' from t;
+with t as (insert into tenants (name) select 'Multi ' || g || ' $RUN_ID' from generate_series(1, 5) g returning id)
+insert into members (tenant_id, user_id, role) select id, '$MULTI_ID'::uuid, 'staff' from t;
+SQL
+
 ENV_FILE="bruno/environments/local-stack.bru"
 cat > "$ENV_FILE" <<ENV
 vars {
@@ -97,9 +115,17 @@ vars {
   staffAPassword: $STAFF_PW
   viewerAEmail: $VIEWER_EMAIL
   viewerAPassword: $VIEWER_PW
+  inviteeEmail: $INVITEE_EMAIL
+  inviteeId: $INVITEE_ID
+  cappedOwnerEmail: $CAPPED_EMAIL
+  cappedOwnerPassword: $CAPPED_PW
+  multiStaffEmail: $MULTI_EMAIL
+  multiStaffPassword: $MULTI_PW
   ownerAToken:
   staffAToken:
   viewerAToken:
+  cappedOwnerToken:
+  multiStaffToken:
 }
 ENV
 

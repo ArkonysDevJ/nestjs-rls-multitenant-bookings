@@ -91,7 +91,7 @@ jobs:
 
       - name: Integration tests (Bruno)
         working-directory: apps/api/bruno
-        run: node "$RUNNER_TEMP/bru/node_modules/@usebruno/cli/bin/bru.js" run setup security-tests booking-cancel --env local-stack
+        run: node "$RUNNER_TEMP/bru/node_modules/@usebruno/cli/bin/bru.js" run setup security-tests booking-cancel signup --env local-stack
 
       - name: API log
         if: failure()

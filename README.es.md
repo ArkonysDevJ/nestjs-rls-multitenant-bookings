@@ -39,7 +39,7 @@ apps/
 │   │       ├── filters/all-exceptions.filter.ts   # Traduce códigos de error de Postgres a HTTP
 │   │       └── supabase/supabase.client.ts  # Cliente service-role compartido
 │   ├── supabase/
-│   │   ├── migrations/                      # 0001-0011, aplicadas en orden (ver abajo)
+│   │   ├── migrations/                      # 0001-0012, aplicadas en orden (ver abajo)
 │   │   └── tests/                           # Suite pgTAP sobre la superficie de RLS
 │   └── bruno/                               # Colección de tests HTTP y script de datos locales (ver Testing)
 └── web/                                      # Dashboard React + Vite
@@ -56,7 +56,7 @@ pake/                                    # íconos de la app (512 y 1024 px) par
 Dos barreras independientes protegen el aislamiento entre tenants, y cuál aplica depende de la ruta que siga la petición:
 
 - **A través de la API.** El backend habla con Postgres con la clave service-role, que salta RLS. En esta ruta el aislamiento depende de `TenantGuard`/`RolesGuard` más un filtro explícito por `tenant_id` en cada consulta de los servicios; RLS no aplica, así que un filtro omitido sería una fuga directa entre tenants.
-- **Directo con el JWT de un usuario.** Un cliente que consulta por sí mismo la API PostgREST de Supabase queda sujeto a las políticas RLS de Postgres y a los privilegios de columna del rol `authenticated`. Esas son las barreras en esa ruta.
+- **Directo con el JWT de un usuario.** Un cliente que consulta por sí mismo la API PostgREST de Supabase queda sujeto a los privilegios de tabla y de columna del rol `authenticated` y a las políticas RLS de Postgres. Esas son las barreras en esa ruta. Puede leer, crear recursos y reservas y cancelar una reserva; no puede crear tenants ni members.
 
 Algunas reglas las aplica Postgres a cualquier escritor, el service role incluido, así que valen en ambas rutas. Esto es lo que protege cada regla:
 
@@ -64,6 +64,7 @@ Algunas reglas las aplica Postgres a cualquier escritor, el service role incluid
 |---|---|---|
 | Las filas de otros tenants no se pueden leer | `TenantGuard` + filtro por `tenant_id` en cada consulta | Políticas RLS de select |
 | Roles por acción | `RolesGuard` | Políticas RLS de insert/update |
+| Crear un tenant o un member | `AuthGuard` (tenant); `TenantGuard` + `RolesGuard` con `owner` (member); el límite de 5 tenants propios en el servicio. La escritura usa el service role | No es posible: `authenticated` no tiene privilegio `insert` sobre `tenants` ni `members` |
 | Una reserva usa un recurso de su propio tenant | Foreign key compuesta `bookings_resource_same_tenant_fk`. La API responde 404, igual para un recurso de otro tenant y para uno que no existe | La misma foreign key (`23503`, también igual para un horario ocupado y uno libre) |
 | Dos reservas confirmadas no se solapan en un recurso | Exclusion constraint `no_overlapping_bookings` (encabezado por `tenant_id`); 409 | El mismo constraint |
 | Un owner solo puede cancelar una reserva | Solo existe `PATCH /bookings/:id/cancel`; cancela una reserva confirmada y nada más | `UPDATE` se concede solo sobre `bookings.status`, y la política del owner permite confirmada → cancelada; cancelada es terminal |
@@ -88,12 +89,12 @@ VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
 VITE_API_URL=http://localhost:3000/v1
 ```
 
-Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario y `0011` restringe quién puede ejecutar las funciones públicas:
+Aplica las migraciones en orden contra tu proyecto de Supabase — `0001` crea el esquema y las políticas RLS, `0002` siembra dos tenants demo (sin filas en `auth.users`, esas vienen de registros reales), `0003` a `0007` agregan la creación por autoservicio de tenant/member/resource y el límite de tenants propios, `0008` agrega `public.ping()`, la función no-op detrás de `GET /v1/health` (ver la tabla de API abajo y `.github/workflows/keep-alive.yml`), `0009` hace que una reserva apunte a un recurso de su propio tenant (aborta si ya existen reservas que rompen esa regla) `0010` limita lo que un owner puede cambiar de una reserva con el JWT de un usuario, `0011` restringe quién puede ejecutar las funciones públicas y `0012` fija en las migraciones todos los privilegios de tablas, columnas y funciones en vez de depender del valor por defecto de cada entorno, y elimina las políticas de alta directa: los tenants y los members se crean solo a través de la API:
 
 ```bash
 cd apps/api
 supabase link --project-ref <tu-project-ref>
-supabase migration list   # Local lista 0001-0011; Remote está vacío en un proyecto nuevo
+supabase migration list   # Local lista 0001-0012; Remote está vacío en un proyecto nuevo
 supabase db push          # aplica las faltantes en orden y las registra
 ```
 
@@ -125,10 +126,11 @@ Todos los endpoints requieren `Authorization: Bearer <supabase-jwt>` y viven baj
 Cuatro tipos de pruebas, cada una enfocada en algo concreto. Todas corren contra un stack local de Supabase, nunca contra el proyecto demo.
 
 - **Jest** (`apps/api/src/**/*.spec.ts`) — pruebas unitarias sin base de datos. Cubren los guards, el filtro de excepciones y la intención de cada servicio: toda consulta acotada por tenant lleva el filtro de tenant, y el tenant de una escritura sale del contexto de la petición, nunca del payload. Muestran qué le pide el código a la base de datos, no que la base de datos rechace algo.
-- **pgTAP** (`apps/api/supabase/tests/database/`) — pruebas a nivel SQL de lo que Postgres aplica por sí mismo. `001` cubre el aislamiento entre tenants mediante RLS. `002` cubre la regla de que una reserva usa un recurso de su propio tenant, con el JWT de un usuario y como service role, incluido que el rechazo es el mismo si el horario está ocupado o libre. `003` cubre qué puede cambiar un owner de una reserva con el JWT de un usuario.
+- **pgTAP** (`apps/api/supabase/tests/database/`) — pruebas a nivel SQL de lo que Postgres aplica por sí mismo. `001` cubre el aislamiento entre tenants mediante RLS. `002` cubre la regla de que una reserva usa un recurso de su propio tenant, con el JWT de un usuario y como service role, incluido que el rechazo es el mismo si el horario está ocupado o libre. `003` cubre qué puede cambiar un owner de una reserva con el JWT de un usuario. `004` cubre quién puede ejecutar cada función pública. `005` cubre los privilegios de cada tabla, columna y función, los valores por defecto de los objetos que se creen después, que un insert directo en `tenants` o `members` se rechaza por privilegio, y que cada comando concedido sigue pasando la reescritura de políticas.
 - **Bruno** (`apps/api/bruno/`) — pruebas HTTP contra la API en ejecución y contra PostgREST, sin mocks:
   - **`setup/`** — inicia sesión directamente contra el password grant de Supabase Auth (no contra el backend, que no tiene su propio endpoint de login) y captura cada JWT en una variable de entorno automáticamente vía un post-response script.
-  - **`security-tests/`** — `00`/`00b` prueban que `AuthGuard` rechaza un token faltante o inválido antes de que corra cualquier otra cosa; `01`/`02` prueban que `TenantGuard`/`RolesGuard` rechazan peticiones cross-tenant y de rol incorrecto; `03`/`04` son las que realmente importan para la afirmación central de este proyecto — evitan el backend de NestJS por completo y consultan la API PostgREST de Supabase directamente con el JWT de un usuario real, probando que RLS por sí sola filtra las filas cross-tenant (`200 []`) independientemente de cualquier guard de la capa de aplicación, con una petición de control del mismo tenant (`04`) confirmando que el resultado vacío significa aislamiento, no un endpoint roto; `05`/`05b` prueban que una reserva sobre un recurso de otro tenant y una sobre un recurso que no existe reciben el mismo 404.
+  - **`security-tests/`** — `00`/`00b` prueban que `AuthGuard` rechaza un token faltante o inválido antes de que corra cualquier otra cosa; `01`/`02` prueban que `TenantGuard`/`RolesGuard` rechazan peticiones cross-tenant y de rol incorrecto; `03`/`04` son las que realmente importan para la afirmación central de este proyecto — evitan el backend de NestJS por completo y consultan la API PostgREST de Supabase directamente con el JWT de un usuario real, probando que RLS por sí sola filtra las filas cross-tenant (`200 []`) independientemente de cualquier guard de la capa de aplicación, con una petición de control del mismo tenant (`04`) confirmando que el resultado vacío significa aislamiento, no un endpoint roto; `05`/`05b` prueban que una reserva sobre un recurso de otro tenant y una sobre un recurso que no existe reciben el mismo 404; `06`–`06f` prueban que `anon` y un usuario autenticado no pueden llamar a `find_user_id_by_email`, `ping` ni a las dos funciones que usaban las políticas de alta eliminadas.
+  - **`signup/`** — crear un tenant e invitar a un member a través de la API; los rechazos para staff, viewers y owners de otro tenant, con el mismo 401 para un tenant que no existe; el límite de cinco tenants propios (quien es staff en cinco tenants todavía puede crear el suyo); y los inserts directos en `tenants` y `members` por PostgREST, rechazados con `42501` "permission denied for table".
   - **`booking-cancel/`** — el ciclo de cancelación a través de la API: una reserva confirmada se cancela, cancelarla otra vez es un 409, cancelar una reserva que no existe o una de otro tenant da el mismo 404, y un id mal formado da 400.
 - **`tests/03-concurrent-overlap-race.sh`** — un shell script, no una petición de Bruno, porque probar que el exclusion constraint de no-overlap es race-safe requiere dos peticiones genuinamente simultáneas, algo que un cliente REST gráfico no puede garantizar; dos llamadas `curl` en background sí.
 
@@ -191,7 +193,7 @@ Espera un `201` y un `409`, y elige un horario aleatorio, así que se puede repe
 
 - Row Level Security como una segunda barrera genuina, no una formalidad: `FORCE ROW LEVEL SECURITY` en cada tabla (cierra el bypass del dueño de la tabla), el `auth.uid()` de cada política envuelto en una subquery para caching del planner, y aislamiento verificado independientemente de la capa de aplicación vía peticiones directas a PostgREST — no solo afirmado.
 - Una garantía de no-overlap segura ante concurrencia vía un exclusion constraint de Postgres (`EXCLUDE USING gist`), probada bajo dos peticiones genuinamente simultáneas en vez de asumida a partir de locking a nivel de aplicación.
-- Bootstrap multi-tenant por autoservicio (creación de tenant, invitaciones de member por email, creación de recursos restringida al owner) construido enteramente sobre funciones helper `SECURITY DEFINER` y políticas RLS — incluyendo un bug real detectado y corregido durante el desarrollo: una versión temprana de una función helper era invocable con un user id arbitrario, convirtiéndola en un oráculo de enumeración de metadata; corregido vinculándola al JWT del propio solicitante en vez de a un parámetro externo (ver migración `0007`). Trade-offs deliberados y documentados (un oráculo estrecho de existencia necesario para el bootstrap, y una race condition conocida del mismo usuario en el límite anti-abuso) se señalan explícitamente como decisiones de diseño aceptadas, no deuda silenciosa.
+- Alta multi-tenant por autoservicio (creación de tenant, invitaciones de member por email, creación de recursos restringida al owner). Primero se construyó sobre funciones helper `SECURITY DEFINER` y políticas RLS, incluyendo un bug real detectado y corregido durante el desarrollo: una versión temprana de una función helper era invocable con un user id arbitrario, convirtiéndola en un oráculo de enumeración de metadata; corregido vinculándola al JWT del propio solicitante en vez de a un parámetro externo (ver migración `0007`). Una revisión posterior encontró que la política de insert de `members` no se podía evaluar (recursión infinita) y que cualquier usuario autenticado podía insertar tenants directamente, así que la migración `0012` movió la creación de tenants y members solo a la API y hizo que la base de datos rechace esas escrituras por privilegio. La autorización del alta vive ahora en el código de la API y se prueba allí. Sus trade-offs aceptados (una race condition del mismo usuario en el límite anti-abuso y una compensación no transaccional si falla la fila del owner) se señalan explícitamente, no son deuda silenciosa.
 - Autorización de escritura basada en rol aplicada por acción (`owner` / `staff` / `viewer`), independiente de la validación de membresía al tenant, con ambos checks probados de forma independiente en la suite de tests.
 - Localización completa de la UI en ES/EN (`react-i18next`), español por defecto con un toggle a inglés — una decisión deliberada que encaja con la audiencia inicial real de este proyecto, no un descuido. Los valores de rol (`owner` / `staff` / `viewer`) y el estado de la reserva (`confirmed` / `cancelled`) nunca se traducen: son datos de dominio persistidos/comparados, no copy de UI.
 
@@ -244,7 +246,8 @@ protegida y fusionar despliega.
       políticas RLS asistida por IA, diseñada, dirigida y verificada por el autor
       (no es una auditoría de terceros). Cada hallazgo está cubierto por los tests
       pgTAP de `apps/api/supabase/tests/database/` y por los comentarios de la
-      migración `0007`.
+      migración `0007`. Las políticas de tenants y members que revisó se
+      reemplazaron por la creación solo a través de la API en la migración `0012`.
 - [x] Datos semilla + deploy público — backend en Railway, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
 - [x] README completo con instrucciones de instalación.
 

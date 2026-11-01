@@ -1,6 +1,8 @@
 // apps/api/src/members/dto/add-member.dto.ts
 // [F-ID: SRC-MEMBERS-DTO-ADD-MEMBER-01]
-// @version 1.1.0
+// @version 1.2.0
+// @changelog 1.2.0 — The RLS policy mentioned in 1.0.0 no longer exists
+//   (migration 0012); the allowed roles are enforced by this DTO alone.
 // @changelog 1.1.0 — email replaces userId: an owner has the invitee's
 //   email, not their UUID. MembersService resolves it server-side via
 //   find_user_id_by_email() (see migration 0004) before inserting.

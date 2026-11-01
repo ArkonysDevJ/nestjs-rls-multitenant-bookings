@@ -1,0 +1,39 @@
+meta {
+  name: 06 - A nonexistent tenant gets the same response as a tenant the caller does not belong to
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: 00000000-0000-4000-8000-000000000000
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{inviteeEmail}}",
+    "role": "staff"
+  }
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("same status and body as request 05, so the two cases cannot be told apart", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(JSON.stringify(res.body)).to.equal(bru.getVar("notMemberResponse"));
+  });
+}
+
+docs {
+  Run after 05. A caller must not be able to find out which tenant ids exist.
+}

@@ -9,9 +9,18 @@
 --                                could call would be an account-enumeration
 --                                oracle, reachable with the public key alone)
 --   ping()                       service_role only
---   tenant_has_members(uuid)     authenticated + service_role (used by an RLS
---                                policy, which runs as the caller)
---   owned_tenant_count()         authenticated + service_role (same)
+--   tenant_has_members(uuid)     service_role only
+--   owned_tenant_count()         service_role only
+--
+-- Revision (migration 0012): the last two functions were callable by
+-- authenticated because an RLS policy used them, and the first version of this
+-- file asserted exactly that. Migration 0012 dropped those policies, since
+-- tenants and members are now created only through the API, and revoked EXECUTE
+-- from authenticated. pgTAP checks the final state after every migration, so the
+-- four assertions that described the old state (two catalog checks and two calls
+-- as a signed-in user) were changed to describe the new one. The calls as a
+-- signed-in user are not replaced by calls that must fail, for the reason below;
+-- the catalog assertions cover the denial.
 --
 -- The privileges are asserted from the catalog. A direct SQL call to a function
 -- the role cannot execute is not made here: on the Postgres 17.6 image the local
@@ -23,7 +32,7 @@
 
 begin;
 
-select plan(17);
+select plan(15);
 
 select tests.create_supabase_user('alice', 'alice@example.test');
 
@@ -45,26 +54,17 @@ select ok(has_function_privilege('service_role', 'public.ping()', 'execute'),
 
 select ok(not has_function_privilege('anon', 'public.tenant_has_members(uuid)', 'execute'),
   'tenant_has_members: anon cannot execute');
-select ok(has_function_privilege('authenticated', 'public.tenant_has_members(uuid)', 'execute'),
-  'tenant_has_members: authenticated can execute (an RLS policy needs it)');
+select ok(not has_function_privilege('authenticated', 'public.tenant_has_members(uuid)', 'execute'),
+  'tenant_has_members: authenticated cannot execute (no policy uses it any more)');
 select ok(has_function_privilege('service_role', 'public.tenant_has_members(uuid)', 'execute'),
   'tenant_has_members: service_role can execute');
 
 select ok(not has_function_privilege('anon', 'public.owned_tenant_count()', 'execute'),
   'owned_tenant_count: anon cannot execute');
-select ok(has_function_privilege('authenticated', 'public.owned_tenant_count()', 'execute'),
-  'owned_tenant_count: authenticated can execute (an RLS policy needs it)');
+select ok(not has_function_privilege('authenticated', 'public.owned_tenant_count()', 'execute'),
+  'owned_tenant_count: authenticated cannot execute (no policy uses it any more)');
 select ok(has_function_privilege('service_role', 'public.owned_tenant_count()', 'execute'),
   'owned_tenant_count: service_role can execute');
-
--- ─── Calling the policy functions as a signed-in user ───────────────────
-
-select tests.authenticate_as('alice');
-
-select lives_ok($$ select public.tenant_has_members('11111111-1111-4111-8111-111111111111') $$,
-  'a signed-in user can still call tenant_has_members');
-select lives_ok($$ select public.owned_tenant_count() $$,
-  'a signed-in user can still call owned_tenant_count');
 
 -- ─── Calling them as the service role (what the API uses) ───────────────
 

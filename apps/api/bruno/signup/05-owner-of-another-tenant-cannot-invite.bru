@@ -1,0 +1,40 @@
+meta {
+  name: 05 - An owner of tenant A cannot invite into tenant B
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{ownerAToken}}
+  x-tenant-id: {{tenantBId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{inviteeEmail}}",
+    "role": "staff"
+  }
+}
+
+assert {
+  res.status: eq 401
+}
+
+tests {
+  test("rejected as a non-member, without a server error", function () {
+    expect(res.getStatus()).to.equal(401);
+    bru.setVar("notMemberResponse", JSON.stringify(res.body));
+  });
+}
+
+docs {
+  The caller owns tenant A but is not a member of tenant B, so TenantGuard
+  rejects the request before any role check. The body is stored for 06.
+}
