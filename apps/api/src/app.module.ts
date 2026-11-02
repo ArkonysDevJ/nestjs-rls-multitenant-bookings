@@ -1,6 +1,8 @@
 // apps/api/src/app.module.ts
 // [F-ID: SRC-APP-MODULE-01]
-// @version 1.2.0
+// @version 1.3.0
+// @changelog 1.3.0 — RateLimitGuard registered globally (inactive unless its
+//   RATE_LIMIT_* variables are set).
 // @changelog 1.2.0 — Register HealthModule (GET /v1/health). Backs
 //   the Supabase keep-alive automation
 //   (.github/workflows/keep-alive.yml): an unattended scheduler pings
@@ -17,7 +19,9 @@
 // @changelog 1.0.0 — Root module wiring tenants, members, resources and bookings.
 
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { RateLimitGuard } from './common/rate-limit/rate-limit.guard';
 import { TenantsModule } from './tenants/tenants.module';
 import { MembersModule } from './members/members.module';
 import { ResourcesModule } from './resources/resources.module';
@@ -33,5 +37,6 @@ import { HealthModule } from './health/health.module';
     BookingsModule,
     HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {}
