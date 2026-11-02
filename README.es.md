@@ -200,7 +200,7 @@ Espera un `201` y un `409`, y elige un horario aleatorio, así que se puede repe
 ## Demo en vivo
 
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
-**Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
+**Backend:** https://bookings-api-PROJECT_NUMBER.southamerica-east1.run.app
 
 Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
 
@@ -216,15 +216,13 @@ Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres ro
 
 **Por qué Docker.** `apps/api/Dockerfile` convierte la API en una imagen cuyo runtime lo fija la etiqueta base (`node:24.22.1-slim`), en vez de resolverlo un builder al momento de desplegar. La misma imagen corre en local y en cualquier host de contenedores, y solo lleva `dist/` y las dependencias de producción. Se construye desde la raíz del repositorio: `docker build -f apps/api/Dockerfile .`
 
-| | Railway | Cloud Run |
-|---|---|---|
-| Costo con poco tráfico | El contenedor se cobra mientras corre, es decir, todo el tiempo salvo que se active el modo de suspensión | Escala a cero; el tiempo inactivo no se cobra |
-| Arranque en frío | Ninguno por defecto: la instancia sigue activa | La primera petición tras un periodo inactivo espera a que arranque una instancia, salvo que se mantenga un mínimo de instancias |
-| Autenticación | URL pública; el control de acceso queda en la app (aquí, los guards con JWT de Supabase) | Pública, o restringida por la propia plataforma a llamadas autenticadas con IAM |
-| Cómo se fija la versión de Node | Railpack la lee de `.node-version` / `.nvmrc`; con un Dockerfile, la etiqueta de la imagen base | La etiqueta de la imagen base de la imagen desplegada (los despliegues desde código usan buildpacks que leen `engines`) |
-| Quién compila la imagen | Railway, desde el repositorio, en cada despliegue | Uno mismo o el CI (o Cloud Build), subiéndola a un registro |
+**Dónde corre.** La API corre en Google Cloud Run, región `southamerica-east1`:
 
-Este repositorio corre su backend en Railway (ver "Demo en vivo"), donde ya está desplegado; el Dockerfile lleva la decisión de la versión de Node al repositorio en vez de dejársela al builder.
+- De 0 a 2 instancias, con CPU asignada solo mientras se atiende una petición. La primera petición tras un periodo de inactividad espera a que arranque una instancia.
+- El servicio se describe en `apps/api/deploy/service.yaml`. La clave del servicio se lee de Secret Manager con una versión fija; no hay nada secreto en el repositorio.
+- Una fusión a `main` lo despliega: el workflow `Deploy to Cloud Run` corre después del CI, construye la imagen y la despliega por digest. Se autentica con Workload Identity Federation, así que no existe ningún archivo de claves, e ignora los pull requests y los forks. La configuración única está en `apps/api/deploy/RUNBOOK.md`.
+- CORS solo permite los orígenes de `CORS_ORIGINS` y ninguno si la variable no está. Un límite de peticiones por cliente se aplica antes de la autenticación; está inactivo salvo que estén definidas sus cuatro variables `RATE_LIMIT_*`, cosa que solo hace `service.yaml`.
+- `keep-alive.yml` consulta `/v1/health` y tolera el arranque en frío.
 
 **Contrato de la imagen:** escucha en `PORT` (3000 si no está definido) en `0.0.0.0`, no guarda estado local (todos los datos están en Supabase), escribe los logs en stdout/stderr y se cierra de forma ordenada con `SIGTERM`; cualquier host que cumpla eso puede ejecutarla.
 
@@ -248,10 +246,10 @@ protegida y fusionar despliega.
       pgTAP de `apps/api/supabase/tests/database/` y por los comentarios de la
       migración `0007`. Las políticas de tenants y members que revisó se
       reemplazaron por la creación solo a través de la API en la migración `0012`.
-- [x] Datos semilla + deploy público — backend en Railway, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
+- [x] Datos semilla + deploy público — backend en Cloud Run, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
 - [x] README completo con instrucciones de instalación.
 
-✅ Desplegado — agosto 2026. Backend en Railway, frontend en Vercel.
+✅ Desplegado — agosto 2026. Backend en Cloud Run, frontend en Vercel.
 
 ## Licencia
 

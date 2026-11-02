@@ -260,9 +260,35 @@ over HTTP by Bruno `06`–`06f`.
 
 ## 8. Deployment
 
-- **API** on Railway, built from the repository on each push to `main` by
-  Railway's builder (Railpack), which runs `npm install`, `npm run build:api` and
-  `npm run start` and takes the Node version from `.node-version`. **Web** on Vercel. **Database and auth** on Supabase.
+- **API** on Google Cloud Run (project `Multitenant Bookings`, region
+  `southamerica-east1`), **web** on Vercel, **database and auth** on Supabase.
+- The service is described in `apps/api/deploy/service.yaml`: 0 to 2 instances,
+  CPU allocated only while a request runs, a runtime service account of its own,
+  and public invocation (every route checks its own authentication). The image
+  line of that file is a marker; the deploy workflow replaces it with the image
+  digest in a temporary copy, so nothing writes to `main`.
+- `SUPABASE_SERVICE_ROLE_KEY` is read from Secret Manager at a pinned version, not
+  `latest`, so rotating it is a deployment that can be undone.
+- `.github/workflows/deploy.yml` runs after the CI workflow, only for a commit that
+  reached `main` by push in this repository and only if that commit is still the
+  tip of `main`. That check is the job's `if`, evaluated before any step, so a
+  pull request or a fork never gets a token. It authenticates with Workload
+  Identity Federation (no key file): Google accepts only this repository (by
+  numeric id), the `main` branch and this workflow file. The image is built from
+  `apps/api/Dockerfile`, pushed to Artifact Registry and deployed by digest;
+  runs are serialised. The one-time setup is in `apps/api/deploy/RUNBOOK.md`.
+- CORS: `CORS_ORIGINS` lists the web origins allowed to call the API. It fails
+  closed: without the variable no cross-origin request is allowed, and a wildcard
+  is ignored.
+- Rate limiting: an in-memory fixed window per client, applied before
+  authentication so a rejected request never reaches Supabase Auth. `GET /v1/health`
+  has its own, higher-level threshold. The client is the entry of
+  `X-Forwarded-For` counted from the right (`RATE_LIMIT_TRUSTED_PROXY_HOPS`
+  positions in); the entries on the left are written by the client and are not
+  trusted. The limiter is inactive unless `RATE_LIMIT_WINDOW_SECONDS`,
+  `RATE_LIMIT_MAX`, `RATE_LIMIT_HEALTH_MAX` and `RATE_LIMIT_TRUSTED_PROXY_HOPS`
+  are all set, which today only `service.yaml` does. Counters live in each
+  instance and reset when it scales to zero.
 - Branch protection on `main`: pull request required, `ci` must pass.
 - Migrations on the demo database are applied from `apps/api` with
   `supabase db push` after `supabase link`. The history table is aligned
@@ -271,13 +297,16 @@ over HTTP by Bruno `06`–`06f`.
 - `apps/api/Dockerfile` builds the API into a two-stage image on
   `node:24.22.1-slim` that runs as the unprivileged `node` user, listens on
   `PORT` (3000 by default) on `0.0.0.0`, keeps no local state and exits cleanly
-  on `SIGTERM`. It is validated locally; Railway does not use it.
-- API configuration: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`. The
-  service-role key bypasses RLS and must stay on the server.
+  on `SIGTERM`. Cloud Run sets `PORT`.
+- API configuration: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`,
+  `CORS_ORIGINS` and the four `RATE_LIMIT_*` variables. The service-role key
+  bypasses RLS and must stay on the server. For local development with the web
+  app, set `CORS_ORIGINS=http://localhost:5173`.
 - Node 24.22.1 or later is pinned through `engines`, `.nvmrc`, `.node-version`
   and the image tag.
 - `keep-alive.yml` pings `GET /v1/health` every 3 days so the free-tier
-  database is not paused for inactivity. It only reads. GitHub disables
+  database is not paused for inactivity. It only reads, and its `curl` allows for
+  the cold start of a service that scaled to zero. GitHub disables
   scheduled workflows after 60 days without repository activity, so an
   external uptime monitor requesting the same URL is the longer-term backup.
 
