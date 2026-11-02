@@ -39,8 +39,8 @@ gcloud config set project "$PROJECT_ID"
 Re-check the two numeric ids before relying on them:
 
 ```bash
-curl -s "https://api.github.com/repos/$GH_REPO" | grep -E '^  "id"|^    "id"'
-# the first "id" is the repository id, the second (inside "owner") is the owner id
+curl -s "https://api.github.com/repos/$GH_REPO" | jq '.id, .owner.id'
+# the first number is the repository id, the second is the owner id
 ```
 
 ## 1. Preconditions
@@ -60,8 +60,22 @@ curl -s "https://api.github.com/repos/$GH_REPO" | grep -E '^  "id"|^    "id"'
    it.
 
    ```bash
-   gcloud resource-manager org-policies describe iam.allowedPolicyMemberDomains --project="$PROJECT_ID" 2>&1 | head
+   gcloud resource-manager org-policies describe iam.allowedPolicyMemberDomains --project="$PROJECT_ID" --effective 2>&1 | head
    ```
+
+   `--effective` shows the policy that applies to the project, including what it
+   inherits from the organization or a folder. Without it the command shows only
+   what is defined on the project itself, and an inherited restriction would look
+   like "not set".
+
+   Whether the project belongs to an organization:
+
+   ```bash
+   gcloud projects describe "$PROJECT_ID" --format='value(parent.type,parent.id)'
+   ```
+
+   If this prints nothing, the project has no organization and no organization
+   policy can restrict it.
 
    Expected: "not set" or a policy that does not list the project as restricted.
    (The command may need `roles/orgpolicy.policyViewer`; if it is denied, note it
@@ -352,6 +366,10 @@ gcloud iam service-accounts delete "$RUNTIME_SA_EMAIL"
 
 Revoke the Supabase key `bookings-api-cloudrun` separately, in Supabase.
 
+Deleted workload identity pools and service accounts stay in soft-delete for
+about 30 days, and during that time their ID cannot be reused. To run the setup
+again after an undo, use different names or restore them with `undelete`.
+
 ## Points for the auditor
 
 1. `iam.googleapis.com` and `sts.googleapis.com` are enabled in step 2 in
@@ -368,9 +386,12 @@ Revoke the Supabase key `bookings-api-cloudrun` separately, in Supabase.
    on the secret, it is reported, not fixed by widening the role.
 4. `--no-allow-unauthenticated` at creation, then an explicit `allUsers` binding
    in step 8, so the public exposure is a separate, checked step.
-5. The secret is kept in a single region (`user-managed`). A regional outage of
-   Secret Manager would block new revisions, not running ones. Accepted for a
-   demo; say if automatic replication is preferred.
+5. The secret is kept in a single region (`user-managed`). Cloud Run reads the
+   secret when each instance starts, not only when a revision is created, so with
+   `minScale` 0 a regional outage of Secret Manager also stops new instances from
+   starting, including a start from zero. Since the service runs in that same
+   region, automatic replication would add little against a regional outage, so
+   one region is kept.
 6. `job_workflow_ref` for a workflow started by `workflow_run` is expected to
    name the deploy workflow file on the default branch. This is unverified until
    the first run; the claim values of that first run are the check.
