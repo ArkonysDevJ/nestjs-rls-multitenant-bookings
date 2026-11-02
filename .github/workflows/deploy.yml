@@ -1,0 +1,122 @@
+# Deploys the API to Cloud Run.
+#
+# It runs only after the CI workflow finished, and only for a commit that reached
+# `main` through a push of this same repository. The job-level condition below is
+# evaluated before any step, so a pull request, a fork or a failed CI run ends
+# here without ever asking Google for a token.
+#
+# The workflow builds the commit named by the CI run (not whatever `main` points
+# at now), publishes the image, and deploys it by digest. A run whose commit is no
+# longer the tip of `main` stops before authenticating, so an older image is never
+# deployed after a newer one. Deployments are serialised.
+#
+# Authentication is Workload Identity Federation: no key file exists. Google only
+# accepts the token when it comes from this repository, from `main` and from this
+# workflow file. The event cannot be checked on Google's side (for `workflow_run`
+# it is always `workflow_run`), which is why the event is checked here.
+#
+# Nothing in this workflow commits or pushes. The image reference is put into a
+# temporary copy of apps/api/deploy/service.yaml.
+
+name: Deploy to Cloud Run
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: multitenant-bookings
+  PROJECT_NUMBER: "187753719854"
+  REGION: southamerica-east1
+  SERVICE: bookings-api
+  AR_REPOSITORY: bookings-api
+  DEPLOY_SERVICE_ACCOUNT: bookings-api-deployer@multitenant-bookings.iam.gserviceaccount.com
+  WORKLOAD_IDENTITY_PROVIDER: projects/187753719854/locations/global/workloadIdentityPools/github/providers/github-actions
+
+jobs:
+  deploy:
+    name: deploy
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout the commit that passed CI
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      - name: Stop if this is no longer the tip of main
+        id: tip
+        run: |
+          set -euo pipefail
+          tip="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}" refs/heads/main | cut -f1)"
+          if [ "$tip" = "$SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$SHA is not the tip of main ($tip); not deploying it."
+          fi
+
+      - name: Authenticate to Google Cloud
+        if: steps.tip.outputs.current == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Build and publish the image
+        if: steps.tip.outputs.current == 'true'
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/api"
+          docker build -f apps/api/Dockerfile -t "${image}:${SHA}" .
+          docker push "${image}:${SHA}"
+          ref="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${SHA}")"
+          case "$ref" in
+            *@sha256:*) ;;
+            *) echo "::error::Could not read the digest of the pushed image."; exit 1 ;;
+          esac
+          echo "IMAGE_REF=${ref}" >> "$GITHUB_ENV"
+
+      - name: Deploy by digest
+        if: steps.tip.outputs.current == 'true'
+        run: |
+          set -euo pipefail
+          sed "s|__IMAGE__|${IMAGE_REF}|" apps/api/deploy/service.yaml > "${RUNNER_TEMP}/service.yaml"
+          if grep -q '__IMAGE__' "${RUNNER_TEMP}/service.yaml"; then
+            echo "::error::The image marker was not replaced."; exit 1
+          fi
+          gcloud run services replace "${RUNNER_TEMP}/service.yaml" --region "${REGION}"
+
+      - name: Check the new revision answers
+        if: steps.tip.outputs.current == 'true'
+        run: |
+          set -euo pipefail
+          url="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')"
+          curl --fail --silent --show-error --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors "${url}/v1/health"
+          {
+            echo "### Deployed"
+            echo ""
+            echo "- Commit: \`${SHA}\`"
+            echo "- Image: \`${IMAGE_REF}\`"
+            echo "- Service: ${url}"
+          } >> "$GITHUB_STEP_SUMMARY"

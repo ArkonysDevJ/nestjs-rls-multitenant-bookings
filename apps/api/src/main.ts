@@ -1,6 +1,8 @@
 // apps/api/src/main.ts
 // [F-ID: SRC-MAIN-01]
-// @version 1.1.0
+// @version 1.2.0
+// @changelog 1.2.0 — CORS origins now come from CORS_ORIGINS and fail closed
+//   (see common/config/cors.ts); the previous call allowed every origin.
 // @changelog 1.1.0 — Fixed a real CORS gap: @fastify/cors (what
 //   enableCors() configures under the Fastify adapter) only allows the
 //   CORS-safelisted methods by default — GET, HEAD, POST. PATCH was
@@ -16,6 +18,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { corsOptions } from './common/config/cors';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -23,9 +26,7 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
-  app.enableCors({
-    methods: ['GET', 'POST', 'PATCH'],
-  });
+  app.enableCors(corsOptions(process.env));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

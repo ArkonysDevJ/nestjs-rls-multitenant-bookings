@@ -121,7 +121,7 @@ every test passes.
 ## Delivery
 
 - `main` is protected: changes arrive through a pull request and the `ci` check
-  must pass. A merge to `main` deploys to production (API on Railway, web on
+  must pass. A merge to `main` deploys to production (API on Cloud Run, web on
   Vercel), so do not merge or push to `main` yourself.
 - Work on a branch and keep the diff small enough to review.
 - Migrations reach the deployed database through `supabase db push` run from

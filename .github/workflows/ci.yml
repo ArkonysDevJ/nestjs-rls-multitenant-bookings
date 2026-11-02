@@ -49,9 +49,8 @@ jobs:
       - name: Unit tests
         run: npm test --workspace=apps/api -- --ci
 
-      # The deployment builds the API with Nixpacks, but the Dockerfile is part
-      # of the repository and must keep building. The image is only built, not
-      # pushed or run.
+      # The deploy workflow builds this same Dockerfile, so it must keep building.
+      # Here the image is only built, not pushed or run.
       - name: Build the container image
         run: docker build -f apps/api/Dockerfile -t bookings-api:ci .
 

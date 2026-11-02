@@ -180,15 +180,21 @@ grant fails the same way everywhere. It also removes the default `EXECUTE` for
 default: it covers functions `postgres` creates in any schema. It does not touch
 objects owned by other roles. On the local stack, an extension enabled by
 `postgres` ends up owned by `supabase_admin` (checked with `citext` inside a
-rolled-back transaction), so its functions keep their grants.
+rolled-back transaction), so its functions keep their grants. On the hosted
+project the extensions in `extensions` (`pgcrypto`, `uuid-ossp`,
+`pg_stat_statements`) are owned by `postgres`, so an extension enabled there later
+is covered by the global default and gets no `EXECUTE` for `PUBLIC` unless a
+migration grants it.
 
 **Not covered: objects owned by `supabase_admin`.** `0001` creates `btree_gist`,
 which the local stack installs in `public`: 188 functions, 20 types and 12
 operators owned by `supabase_admin`, executable by `PUBLIC`, `anon` and
 `authenticated`. They belong to an extension and are not reachable by the owner
 role of the migrations, so neither the migration nor pgTAP `005` touches them
-(the test leaves out objects that depend on an extension). Where the extension is
-installed on the hosted project was not checked.
+(the test leaves out objects that depend on an extension). The hosted project is
+the same: the catalog shows `btree_gist` in `public` there too, with the same 188
+functions, 20 types and 12 operators, owned by `supabase_admin` and executable by
+`PUBLIC`, `anon` and `authenticated`.
 
 **Convention for new migrations.** Every new table grants explicitly what
 `service_role` and `authenticated` need. Every new function grants `EXECUTE`
@@ -260,9 +266,35 @@ over HTTP by Bruno `06`–`06f`.
 
 ## 8. Deployment
 
-- **API** on Railway, built from the repository on each push to `main` by
-  Railway's builder (Railpack), which runs `npm install`, `npm run build:api` and
-  `npm run start` and takes the Node version from `.node-version`. **Web** on Vercel. **Database and auth** on Supabase.
+- **API** on Google Cloud Run (project `Multitenant Bookings`, region
+  `southamerica-east1`), **web** on Vercel, **database and auth** on Supabase.
+- The service is described in `apps/api/deploy/service.yaml`: 0 to 2 instances,
+  CPU allocated only while a request runs, a runtime service account of its own,
+  and public invocation (every route checks its own authentication). The image
+  line of that file is a marker; the deploy workflow replaces it with the image
+  digest in a temporary copy, so nothing writes to `main`.
+- `SUPABASE_SERVICE_ROLE_KEY` is read from Secret Manager at a pinned version, not
+  `latest`, so rotating it is a deployment that can be undone.
+- `.github/workflows/deploy.yml` runs after the CI workflow, only for a commit that
+  reached `main` by push in this repository and only if that commit is still the
+  tip of `main`. That check is the job's `if`, evaluated before any step, so a
+  pull request or a fork never gets a token. It authenticates with Workload
+  Identity Federation (no key file): Google accepts only this repository (by
+  numeric id), the `main` branch and this workflow file. The image is built from
+  `apps/api/Dockerfile`, pushed to Artifact Registry and deployed by digest;
+  runs are serialised. The one-time setup is in `apps/api/deploy/RUNBOOK.md`.
+- CORS: `CORS_ORIGINS` lists the web origins allowed to call the API. It fails
+  closed: without the variable no cross-origin request is allowed, and a wildcard
+  is ignored.
+- Rate limiting: an in-memory fixed window per client, applied before
+  authentication so a rejected request never reaches Supabase Auth. `GET /v1/health`
+  has its own, higher-level threshold. The client is the entry of
+  `X-Forwarded-For` counted from the right (`RATE_LIMIT_TRUSTED_PROXY_HOPS`
+  positions in); the entries on the left are written by the client and are not
+  trusted. The limiter is inactive unless `RATE_LIMIT_WINDOW_SECONDS`,
+  `RATE_LIMIT_MAX`, `RATE_LIMIT_HEALTH_MAX` and `RATE_LIMIT_TRUSTED_PROXY_HOPS`
+  are all set, which today only `service.yaml` does. Counters live in each
+  instance and reset when it scales to zero.
 - Branch protection on `main`: pull request required, `ci` must pass.
 - Migrations on the demo database are applied from `apps/api` with
   `supabase db push` after `supabase link`. The history table is aligned
@@ -271,13 +303,16 @@ over HTTP by Bruno `06`–`06f`.
 - `apps/api/Dockerfile` builds the API into a two-stage image on
   `node:24.22.1-slim` that runs as the unprivileged `node` user, listens on
   `PORT` (3000 by default) on `0.0.0.0`, keeps no local state and exits cleanly
-  on `SIGTERM`. It is validated locally; Railway does not use it.
-- API configuration: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`. The
-  service-role key bypasses RLS and must stay on the server.
+  on `SIGTERM`. Cloud Run sets `PORT`.
+- API configuration: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`,
+  `CORS_ORIGINS` and the four `RATE_LIMIT_*` variables. The service-role key
+  bypasses RLS and must stay on the server. For local development with the web
+  app, set `CORS_ORIGINS=http://localhost:5173`.
 - Node 24.22.1 or later is pinned through `engines`, `.nvmrc`, `.node-version`
   and the image tag.
 - `keep-alive.yml` pings `GET /v1/health` every 3 days so the free-tier
-  database is not paused for inactivity. It only reads. GitHub disables
+  database is not paused for inactivity. It only reads, and its `curl` allows for
+  the cold start of a service that scaled to zero. GitHub disables
   scheduled workflows after 60 days without repository activity, so an
   external uptime monitor requesting the same URL is the longer-term backup.
 
@@ -290,6 +325,6 @@ cross-tenant leak.
 |---|---|
 | The owned-tenant cap (5) is read and then followed by the insert, so two simultaneous requests from the same user can pass it. With at most two instances running, this is accepted | Code reading |
 | Creating a tenant is two writes (the tenant, then its owner row) with a compensating delete, not a transaction. If the process dies between them, a tenant with no owner stays behind, visible to nobody. Accepted | Code reading |
-| Objects that an extension puts in `public` and `supabase_admin` owns (`btree_gist`) keep the platform's grants | Run (local stack); hosted project not checked |
+| Objects that an extension puts in `public` and `supabase_admin` owns (`btree_gist`) keep the platform's grants | Run (local stack and hosted project, catalog read) |
 | `GET /tenants/me` returns an empty list if the tenants query fails, instead of an error | Code reading |
 | A booking cannot be rescheduled: the only change allowed after creating it is cancelling it | By design |

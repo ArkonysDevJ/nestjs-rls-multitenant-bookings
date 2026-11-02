@@ -332,7 +332,7 @@ can be repeated. Stop the stack with `supabase stop` when you are done.
 ## Live demo
 
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
-**Backend:** https://nestjs-rls-multitenant-bookings-production.up.railway.app
+**Backend:** https://bookings-api-187753719854.southamerica-east1.run.app
 
 Two tenants (Aurora Studio, Willow Creek Clinic) with demo
 accounts across all three roles, so cross-tenant isolation and
@@ -358,17 +358,21 @@ resolved by a builder at deploy time. The same image runs locally and on
 any container host, carrying only `dist/` and production dependencies.
 Build it from the repository root: `docker build -f apps/api/Dockerfile .`
 
-| | Railway | Cloud Run |
-|---|---|---|
-| Cost with little traffic | The container is billed while it runs, which is all the time unless sleeping is enabled | Scales to zero; idle time is not billed |
-| Cold start | None by default: the instance stays up | The first request after idle waits for an instance to start, unless a minimum instance count is kept |
-| Authentication | Public URL; access control is left to the app (here, the Supabase JWT guards) | Public, or restricted to IAM-authenticated callers by the platform itself |
-| How the Node version is pinned | Railpack reads `.node-version` / `.nvmrc`; with a Dockerfile, the base image tag | The base image tag of the deployed image (source deploys use buildpacks that read `engines`) |
-| Who builds the image | Railway, from the repository, on every deploy | You or your CI (or Cloud Build), pushing to a registry |
+**Where it runs.** The API runs on Google Cloud Run, region `southamerica-east1`:
 
-This repository runs its backend on Railway (see "Live demo"), where it
-already lives; the Dockerfile moves the Node version decision into the
-repository instead of leaving it to the builder.
+- 0 to 2 instances, with CPU allocated only while a request is handled. The
+  first request after a quiet period waits for an instance to start.
+- The service is described in `apps/api/deploy/service.yaml`. The service key
+  is read from Secret Manager at a pinned version; nothing secret is in the
+  repository.
+- A merge to `main` deploys it: the `Deploy to Cloud Run` workflow runs after CI,
+  builds the image, and deploys it by digest. It authenticates with Workload
+  Identity Federation, so no key file exists, and it ignores pull requests and
+  forks. The one-time setup is in `apps/api/deploy/RUNBOOK.md`.
+- CORS only allows the origins in `CORS_ORIGINS` and allows none if it is unset.
+  A per-client rate limit applies before authentication; it is inactive unless
+  its four `RATE_LIMIT_*` variables are set, which only `service.yaml` does.
+- `keep-alive.yml` requests `/v1/health` and tolerates the cold start.
 
 **Image contract:** listens on `PORT` (3000 if unset) on `0.0.0.0`, keeps
 no local state (all data is in Supabase), logs to stdout/stderr, and shuts
@@ -414,12 +418,12 @@ protected, and merging deploys.
       `apps/api/supabase/tests/database/` and the comments in migration `0007`.
       The tenant and member policies it reviewed were replaced by API-only
       creation in migration `0012`.
-- [x] Seed data + public deploy — backend on Railway, frontend on
+- [x] Seed data + public deploy — backend on Cloud Run, frontend on
       Vercel, two seeded tenants, three demo accounts (owner/staff/
       viewer). See "Live demo" above.
 - [x] Full README with setup instructions.
 
-✅ Deployed — August 2026. Backend on Railway, frontend on Vercel.
+✅ Deployed — August 2026. Backend on Cloud Run, frontend on Vercel.
 
 ## License
 

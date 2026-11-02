@@ -39,4 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend health endpoint
-        run: curl --fail --show-error --silent "https://nestjs-rls-multitenant-bookings-production.up.railway.app/v1/health"
+        # Cloud Run scales to zero, so the first request after a quiet period waits
+        # for an instance to start: allow 30 seconds and retry once or twice.
+        run: curl --fail --show-error --silent --max-time 30 --retry 2 --retry-delay 5 --retry-all-errors "https://bookings-api-187753719854.southamerica-east1.run.app/v1/health"
