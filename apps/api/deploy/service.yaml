@@ -1,0 +1,65 @@
+# Cloud Run service definition, applied by the deploy workflow with
+# `gcloud run services replace`.
+#
+# __IMAGE__ is a marker, not a value. The workflow replaces it with the digest of
+# the image it just built, in a temporary copy of this file; nothing writes the
+# digest back to the repository. The digest that is running is recorded in the
+# workflow run and in the Cloud Run revision.
+#
+# Only identifiers appear here. The service key is read from Secret Manager at a
+# pinned version (never `latest`), so rotating it is a deployment: add a version
+# in Secret Manager, change the number below, merge.
+#
+# Replacing the service does not change its IAM policy: the public-invoker
+# binding made during the one-time setup stays.
+#
+# PROJECT_ID must be replaced by the Google Cloud project id before this file is
+# deployed (the deploy workflow refuses to run while it is still here).
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: bookings-api
+  labels:
+    cloud.googleapis.com/location: southamerica-east1
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "2"
+        # CPU is allocated only while a request is being handled.
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      serviceAccountName: bookings-api-runtime@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: __IMAGE__
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: SUPABASE_URL
+              value: https://hhlzjmpxbccrodqthyzh.supabase.co
+            # Web origins allowed to call the API from a browser. Without this
+            # variable no cross-origin request is allowed.
+            - name: CORS_ORIGINS
+              value: https://nestjs-rls-multitenant-bookings-web.vercel.app
+            # Rate limiter. It is inactive unless all four are set.
+            # Hops: how many entries from the right of X-Forwarded-For hold the
+            # client address (the entries on the left are written by the client).
+            - name: RATE_LIMIT_WINDOW_SECONDS
+              value: "60"
+            - name: RATE_LIMIT_MAX
+              value: "120"
+            - name: RATE_LIMIT_HEALTH_MAX
+              value: "30"
+            - name: RATE_LIMIT_TRUSTED_PROXY_HOPS
+              value: "1"
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-service-role-key
+                  key: "1"

@@ -314,6 +314,17 @@ Identifiers only; none of these is a secret.
 
 Never report the Supabase key or any token.
 
+Once the values are known, they replace the placeholders in the repository:
+
+| Placeholder | Files |
+|---|---|
+| `PROJECT_ID` | `apps/api/deploy/service.yaml` (runtime account), `.github/workflows/deploy.yml` (`env`) |
+| `PROJECT_NUMBER` | `.github/workflows/deploy.yml` (`env`), the service URL in `.github/workflows/keep-alive.yml`, `README.md` and `README.es.md` |
+| Secret version | `key:` of `SUPABASE_SERVICE_ROLE_KEY` in `apps/api/deploy/service.yaml` (it is `"1"` now) |
+
+The service URL has the form `https://bookings-api-<PROJECT_NUMBER>.southamerica-east1.run.app`;
+check it against the URL reported in step 6.
+
 ## 11. Verification summary
 
 - [ ] Six APIs enabled.
