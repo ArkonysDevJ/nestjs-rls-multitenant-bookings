@@ -180,15 +180,21 @@ grant fails the same way everywhere. It also removes the default `EXECUTE` for
 default: it covers functions `postgres` creates in any schema. It does not touch
 objects owned by other roles. On the local stack, an extension enabled by
 `postgres` ends up owned by `supabase_admin` (checked with `citext` inside a
-rolled-back transaction), so its functions keep their grants.
+rolled-back transaction), so its functions keep their grants. On the hosted
+project the extensions in `extensions` (`pgcrypto`, `uuid-ossp`,
+`pg_stat_statements`) are owned by `postgres`, so an extension enabled there later
+is covered by the global default and gets no `EXECUTE` for `PUBLIC` unless a
+migration grants it.
 
 **Not covered: objects owned by `supabase_admin`.** `0001` creates `btree_gist`,
 which the local stack installs in `public`: 188 functions, 20 types and 12
 operators owned by `supabase_admin`, executable by `PUBLIC`, `anon` and
 `authenticated`. They belong to an extension and are not reachable by the owner
 role of the migrations, so neither the migration nor pgTAP `005` touches them
-(the test leaves out objects that depend on an extension). Where the extension is
-installed on the hosted project was not checked.
+(the test leaves out objects that depend on an extension). The hosted project is
+the same: the catalog shows `btree_gist` in `public` there too, with the same 188
+functions, 20 types and 12 operators, owned by `supabase_admin` and executable by
+`PUBLIC`, `anon` and `authenticated`.
 
 **Convention for new migrations.** Every new table grants explicitly what
 `service_role` and `authenticated` need. Every new function grants `EXECUTE`
@@ -319,6 +325,6 @@ cross-tenant leak.
 |---|---|
 | The owned-tenant cap (5) is read and then followed by the insert, so two simultaneous requests from the same user can pass it. With at most two instances running, this is accepted | Code reading |
 | Creating a tenant is two writes (the tenant, then its owner row) with a compensating delete, not a transaction. If the process dies between them, a tenant with no owner stays behind, visible to nobody. Accepted | Code reading |
-| Objects that an extension puts in `public` and `supabase_admin` owns (`btree_gist`) keep the platform's grants | Run (local stack); hosted project not checked |
+| Objects that an extension puts in `public` and `supabase_admin` owns (`btree_gist`) keep the platform's grants | Run (local stack and hosted project, catalog read) |
 | `GET /tenants/me` returns an empty list if the tenants query fails, instead of an error | Code reading |
 | A booking cannot be rescheduled: the only change allowed after creating it is cancelling it | By design |
