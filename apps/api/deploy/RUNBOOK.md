@@ -381,9 +381,9 @@ again after an undo, use different names or restore them with `undelete`.
    filtered by `job_workflow_ref` would be stricter on its own but ties the
    binding to the repository name. Which one is preferred?
 3. The deployer account has no Secret Manager role. Deploying a revision that
-   references a secret is expected to need only that the runtime account can read
-   it. This is not verified; if the first deployment reports a missing permission
-   on the secret, it is reported, not fixed by widening the role.
+   references a secret needs only that the runtime account can read it. Checked on
+   the first deployment (2 November 2026): it succeeded with no Secret Manager
+   role on the deployer account.
 4. `--no-allow-unauthenticated` at creation, then an explicit `allUsers` binding
    in step 8, so the public exposure is a separate, checked step.
 5. The secret is kept in a single region (`user-managed`). Cloud Run reads the
@@ -392,6 +392,6 @@ again after an undo, use different names or restore them with `undelete`.
    starting, including a start from zero. Since the service runs in that same
    region, automatic replication would add little against a regional outage, so
    one region is kept.
-6. `job_workflow_ref` for a workflow started by `workflow_run` is expected to
-   name the deploy workflow file on the default branch. This is unverified until
-   the first run; the claim values of that first run are the check.
+6. `job_workflow_ref` for a workflow started by `workflow_run` names the deploy
+   workflow file on the default branch. Checked on the first deployment: Google
+   accepted the token under the condition of step 9, which includes that claim.
