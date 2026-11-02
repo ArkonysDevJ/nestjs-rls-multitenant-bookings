@@ -418,12 +418,12 @@ protected, and merging deploys.
       `apps/api/supabase/tests/database/` and the comments in migration `0007`.
       The tenant and member policies it reviewed were replaced by API-only
       creation in migration `0012`.
-- [x] Seed data + public deploy — backend on Cloud Run, frontend on
-      Vercel, two seeded tenants, three demo accounts (owner/staff/
-      viewer). See "Live demo" above.
+- [x] Seed data + public deploy — two seeded tenants, three demo accounts
+      (owner/staff/viewer). The backend has run on Cloud Run since November
+      2026. See "Live demo" above.
 - [x] Full README with setup instructions.
 
-✅ Deployed — August 2026. Backend on Cloud Run, frontend on Vercel.
+✅ Deployed — August 2026. In November 2026 the backend moved to Google Cloud Run; the frontend stays on Vercel and the database on Supabase.
 
 ## License
 
