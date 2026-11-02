@@ -33,13 +33,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROJECT_ID: PROJECT_ID
-  PROJECT_NUMBER: PROJECT_NUMBER
+  PROJECT_ID: multitenant-bookings
+  PROJECT_NUMBER: "187753719854"
   REGION: southamerica-east1
   SERVICE: bookings-api
   AR_REPOSITORY: bookings-api
-  DEPLOY_SERVICE_ACCOUNT: bookings-api-deployer@PROJECT_ID.iam.gserviceaccount.com
-  WORKLOAD_IDENTITY_PROVIDER: projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github-actions
+  DEPLOY_SERVICE_ACCOUNT: bookings-api-deployer@multitenant-bookings.iam.gserviceaccount.com
+  WORKLOAD_IDENTITY_PROVIDER: projects/187753719854/locations/global/workloadIdentityPools/github/providers/github-actions
 
 jobs:
   deploy:
@@ -73,19 +73,6 @@ jobs:
           else
             echo "current=false" >> "$GITHUB_OUTPUT"
             echo "::notice::$SHA is not the tip of main ($tip); not deploying it."
-          fi
-
-      - name: Refuse to run with placeholders left in the configuration
-        if: steps.tip.outputs.current == 'true'
-        run: |
-          set -euo pipefail
-          for value in "$PROJECT_ID" "$PROJECT_NUMBER"; do
-            case "$value" in
-              PROJECT_ID|PROJECT_NUMBER) echo "::error::Fill in PROJECT_ID and PROJECT_NUMBER (workflow env) first."; exit 1 ;;
-            esac
-          done
-          if grep -q '@PROJECT_ID\.' apps/api/deploy/service.yaml; then
-            echo "::error::apps/api/deploy/service.yaml still has PROJECT_ID in the service account."; exit 1
           fi
 
       - name: Authenticate to Google Cloud

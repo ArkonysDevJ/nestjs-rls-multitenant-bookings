@@ -200,7 +200,7 @@ Espera un `201` y un `409`, y elige un horario aleatorio, así que se puede repe
 ## Demo en vivo
 
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
-**Backend:** https://bookings-api-PROJECT_NUMBER.southamerica-east1.run.app
+**Backend:** https://bookings-api-187753719854.southamerica-east1.run.app
 
 Dos tenants (Aurora Studio, Willow Creek Clinic) con cuentas demo en los tres roles, así que el aislamiento cross-tenant y el acceso basado en rol son visibles sin necesidad de crear datos primero:
 

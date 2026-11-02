@@ -12,9 +12,6 @@
 #
 # Replacing the service does not change its IAM policy: the public-invoker
 # binding made during the one-time setup stays.
-#
-# PROJECT_ID must be replaced by the Google Cloud project id before this file is
-# deployed (the deploy workflow refuses to run while it is still here).
 
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -33,7 +30,7 @@ spec:
         # CPU is allocated only while a request is being handled.
         run.googleapis.com/cpu-throttling: "true"
     spec:
-      serviceAccountName: bookings-api-runtime@PROJECT_ID.iam.gserviceaccount.com
+      serviceAccountName: bookings-api-runtime@multitenant-bookings.iam.gserviceaccount.com
       containers:
         - image: __IMAGE__
           resources:

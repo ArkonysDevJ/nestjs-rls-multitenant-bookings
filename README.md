@@ -332,7 +332,7 @@ can be repeated. Stop the stack with `supabase stop` when you are done.
 ## Live demo
 
 **Frontend:** https://nestjs-rls-multitenant-bookings-web.vercel.app
-**Backend:** https://bookings-api-PROJECT_NUMBER.southamerica-east1.run.app
+**Backend:** https://bookings-api-187753719854.southamerica-east1.run.app
 
 Two tenants (Aurora Studio, Willow Creek Clinic) with demo
 accounts across all three roles, so cross-tenant isolation and
