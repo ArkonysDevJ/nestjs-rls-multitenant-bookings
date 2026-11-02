@@ -246,10 +246,10 @@ protegida y fusionar despliega.
       pgTAP de `apps/api/supabase/tests/database/` y por los comentarios de la
       migración `0007`. Las políticas de tenants y members que revisó se
       reemplazaron por la creación solo a través de la API en la migración `0012`.
-- [x] Datos semilla + deploy público — backend en Cloud Run, frontend en Vercel, dos tenants sembrados, tres cuentas demo (owner/staff/viewer). Ver "Demo en vivo" arriba.
+- [x] Datos semilla + deploy público — dos tenants sembrados, tres cuentas demo (owner/staff/viewer). El backend corre en Cloud Run desde noviembre de 2026. Ver "Demo en vivo" arriba.
 - [x] README completo con instrucciones de instalación.
 
-✅ Desplegado — agosto 2026. Backend en Cloud Run, frontend en Vercel.
+✅ Desplegado — agosto 2026. En noviembre de 2026 el backend pasó a Google Cloud Run; el frontend sigue en Vercel y la base de datos en Supabase.
 
 ## Licencia
 
